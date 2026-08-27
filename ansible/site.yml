@@ -49,6 +49,11 @@
     - { role: dotfiles, tags: [dotfiles] }
     - { role: hardware, tags: [hardware] }
 
+    # Records what actually got installed and fails if it does not match what
+    # group_vars declared. MUST stay ahead of seal: seal deletes
+    # /var/lib/apt/lists, which is where package origin data comes from.
+    - { role: manifest, tags: [manifest] }
+
     # Image-only. Arms the first-boot hook, then strips everything
     # machine-specific so the artifact is a clean template.
     - { role: firstboot, tags: [firstboot], when: workstation_phase == 'image' }

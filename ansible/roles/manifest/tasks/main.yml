@@ -1,0 +1,85 @@
+---
+# Records what actually ended up in this image, and fails the build if it does
+# not match what group_vars declared.
+#
+# ORDERING: this role must run BEFORE roles/seal. seal deletes
+# /var/lib/apt/lists, and those indexes are the only source for which
+# repository a package came from. Run it after seal and the origin data goes
+# quietly missing rather than erroring -- see site.yml, where the ordering is
+# commented.
+
+- name: Capture the installed inventory
+  ansible.builtin.script:
+    cmd: capture-manifest.py /etc/workstation-manifest.json
+  changed_when: false
+  register: manifest_capture
+
+- name: Report what was captured
+  ansible.builtin.debug:
+    msg: "{{ manifest_capture.stdout_lines | default([]) }}"
+
+- name: Read the manifest back
+  ansible.builtin.slurp:
+    src: /etc/workstation-manifest.json
+  register: manifest_raw
+
+- name: Parse the manifest
+  ansible.builtin.set_fact:
+    manifest_data: "{{ manifest_raw.content | b64decode | from_json }}"
+
+# --- Declared vs actual -------------------------------------------------------
+# The whole point of the manifest. Without this, a package that silently failed
+# to install ships in the image and nobody finds out until they go looking for
+# it on a running machine.
+- name: Assemble the declared package set
+  ansible.builtin.set_fact:
+    manifest_declared: >-
+      {{ (apps_apt_base
+          + apps_apt_dev
+          + (apps_apt_desktop if workstation_desktop_enabled | bool else [])
+          + hardware_packages
+          + (apps_repos_enabled | default([]) | map(attribute='packages') | flatten | list)
+         ) | unique | sort }}
+
+# Compared against satisfied_names rather than real package names alone: a
+# declaration may legitimately name a virtual package, and comparing only
+# against installed package names would report it missing while it is plainly
+# there. See the Provides handling in capture-manifest.py.
+- name: Identify declared packages missing from the image
+  ansible.builtin.set_fact:
+    manifest_missing: "{{ manifest_declared | difference(manifest_data.satisfied_names) }}"
+
+- name: Identify packages that were declared for removal but are still present
+  ansible.builtin.set_fact:
+    manifest_not_removed: >-
+      {{ apps_apt_absent | intersect(manifest_data.satisfied_names) }}
+
+- name: Fail the build when a declared package is not installed
+  ansible.builtin.assert:
+    that:
+      - manifest_missing | length == 0
+      - manifest_not_removed | length == 0
+    fail_msg: >-
+      Image does not match what group_vars declares.
+      {% if manifest_missing | length %}
+      Declared but NOT installed: {{ manifest_missing | join(', ') }}.
+      Check the package name exists for this release --
+      scripts/verify-change.sh apt {{ manifest_missing | join(' ') }}
+      {% endif %}
+      {% if manifest_not_removed | length %}
+      Declared in apps_apt_absent but still present:
+      {{ manifest_not_removed | join(', ') }}.
+      {% endif %}
+    success_msg: >-
+      All {{ manifest_declared | length }} declared packages are installed
+      ({{ manifest_data.counts.apt_total }} apt packages total,
+      {{ manifest_data.counts.apt_auto }} pulled in as dependencies).
+
+# Written separately rather than merged into the manifest so the capture script
+# stays a pure inventory of the machine, with no notion of what was intended.
+# render-docs.py joins the two.
+- name: Record the declared set alongside the manifest
+  ansible.builtin.copy:
+    content: "{{ { 'declared': manifest_declared, 'absent': apps_apt_absent } | to_nice_json }}\n"
+    dest: /etc/workstation-declared.json
+    mode: "0644"
