@@ -64,6 +64,13 @@ make image                           # ~30-60 min
 make test                            # boot it in libvirt and check it comes up
 ```
 
+New here and using Claude Code? You do not have to learn the layout of
+`group_vars/all.yml` first. Open Claude Code in the repo and say what you want —
+*"add ripgrep and fzf"*, *"make the dock auto-hide"* — and the bundled
+[config-change skill](#ask-claude-recommended-especially-at-first) works out where
+it goes, shows you a plan before touching anything, checks the packages exist, and
+lints before it commits.
+
 Output lands in `build/workstation-<version>/`:
 
 | File | Use |
@@ -138,7 +145,7 @@ build rather than a laptop.
 
 ## Changing the configuration
 
-Almost everything lives in **`ansible/group_vars/all.yml`**:
+Almost everything lives in **`ansible/group_vars/all.yml`** — it is data, not code:
 
 ```yaml
 apps_apt_base:    [ripgrep, jq, tmux, ...]   # add a line, rebuild
@@ -149,6 +156,81 @@ desktop_dconf:    [{ key: /org/gnome/..., value: "'prefer-dark'" }]
 ```
 
 Then either `make apply` (this machine, now) or `make image` (a new artifact).
+
+There are two ways to make that edit. If you have Claude Code, use the first one.
+
+### Ask Claude (recommended, especially at first)
+
+This repo ships a Claude Code skill at **`.claude/skills/config-change/`**. Open
+Claude Code in the repo and say what you want in plain language — no need to know
+which file or which list:
+
+```
+add duf and hyperfine, I keep apt installing them by hand
+I want Tailscale, but from their repo not the Ubuntu archive
+make the dock auto-hide and move it to the bottom
+stop installing gimp
+pin node to 22
+```
+
+It triggers on its own from phrasing like that. You can also invoke it explicitly
+with `/config-change`.
+
+It then walks a fixed path:
+
+1. **Works out where the change belongs** — which list, or whether it needs a role.
+2. **Asks a follow-up** only when the answer changes the edit (e.g. VS Code exists
+   as a snap, a flatpak, *and* a Microsoft apt repo — those are not equivalent).
+3. **Shows you a short plan and waits.** Nothing is edited before you approve.
+4. **Makes the edit**, matching the file's existing style.
+5. **Verifies**, then runs `make lint`.
+6. **Commits and pushes**, with a message explaining *why*, not just what.
+
+**What step 5 is really for.** The expensive mistake in this repo is a name that
+does not exist. Nothing catches it at edit time — `apt install` dies deep inside a
+Packer run, 30–60 minutes in, after the base install and most of the provisioning.
+So the skill checks first, using `scripts/verify-change.sh`, which you can also run
+yourself:
+
+```bash
+.claude/skills/config-change/scripts/verify-change.sh apt      ripgrep neovim
+.claude/skills/config-change/scripts/verify-change.sh snap     code
+.claude/skills/config-change/scripts/verify-change.sh flatpak  com.spotify.Client
+.claude/skills/config-change/scripts/verify-change.sh repo <key-url> <base-url> <suite> [component]
+```
+
+apt names are checked against the same `Packages` indexes apt itself reads, so the
+answer is authoritative rather than a guess. It reports three outcomes, not two:
+
+| Exit | Meaning |
+|---|---|
+| 0 | verified to exist |
+| 1 | definitively does not exist (near-misses suggested) |
+| 2 | could not check — offline or host blocked |
+
+Exit 2 is deliberately **not** a pass. A checker that reports success when it
+reached nothing launders a guess into a green tick, so the skill reports that case
+as unverified rather than quietly proceeding.
+
+The skill does **not** build an image. `make image` needs KVM and takes 30–60
+minutes, so it stays your call — the skill offers it when a change looks risky and
+tells you plainly what it did and did not prove.
+
+### By hand
+
+Nothing about the skill is load-bearing — it is a shortcut, not a gate. Edit
+`ansible/group_vars/all.yml` directly, then `make lint`, then commit as usual.
+
+Worth knowing if you go this route, because all three lint clean and fail later:
+
+- **dconf values are GVariant literals.** A string needs its own inner quotes
+  (`"'prefer-dark'"`), a uint needs its type prefix (`"uint32 300"`), a boolean is
+  bare (`"true"`). Drop the inner quotes on a string and the dconf file fails to load.
+- **A vendor repo's packages go in that repo entry's own `packages:` list**, never
+  in `apps_apt_base` — otherwise apt tries to install them before the repo exists.
+- **The keyring filename is derived from the entry's `name:`.** An entry named
+  `tailscale` must say `signed-by=/etc/apt/keyrings/tailscale.gpg`. A mismatch
+  produces a signature error that reads like a network fault.
 
 Adding a third-party APT repo is data too — name, key URL, repo line, packages.
 Keys are dearmoured into `/etc/apt/keyrings` and referenced with `signed-by`, so
@@ -198,6 +280,8 @@ terraform/artifacts/         image bucket
 terraform/testlab/           throwaway VM for verifying a build
 tests/goss/                  assertions run inside the image during the build
 scripts/                     flash, fetch, publish, build-iso
+.claude/skills/config-change/  Claude Code skill for making a config change:
+                             SKILL.md, scripts/verify-change.sh, evals/
 ```
 
 ## Requirements
