@@ -126,6 +126,8 @@ apps_apt_desktop:
   - flameshot
   - xclip
   - wl-clipboard
+  - wireshark
+  - tshark
 
 # Packages to remove (Ubuntu ships a few things you may not want).
 apps_apt_absent:
@@ -214,6 +216,20 @@ desktop_dconf:
 
 # Automatic login. Convenient on a personal laptop, weak on a stolen one.
 desktop_autologin: false
+
+# Let the workstation user capture packets without sudo.
+#
+# wireshark-common asks this via debconf and defaults to FALSE, so an
+# unattended install produces a Wireshark that cannot capture as your user --
+# and no 'wireshark' group to join, because postinst only creates that group
+# when this is enabled. Setting it preseeds the answer and adds the user to
+# the group.
+#
+# The tradeoff, in Debian's own words: dumpcap becomes setuid/setcap, which
+# "may be a security risk". It is still the option Debian recommends over
+# running the whole GUI as root. Set false to ship the stock behaviour, where
+# capture requires elevation.
+desktop_wireshark_capture_as_user: true
 
 # =============================================================================
 #  SECURITY

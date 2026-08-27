@@ -1,9 +1,36 @@
 ---
+# Must run BEFORE the package installs: debconf is consulted by the postinst,
+# so preseeding afterwards would need a dpkg-reconfigure to take effect.
+- name: Install debconf tooling
+  ansible.builtin.apt:
+    name: debconf-utils
+    state: present
+  when: desktop_wireshark_capture_as_user | bool
+
+- name: Preseed Wireshark to allow non-root packet capture
+  ansible.builtin.debconf:
+    name: wireshark-common
+    question: wireshark-common/install-setuid
+    vtype: boolean
+    value: "true"
+  when: desktop_wireshark_capture_as_user | bool
+
 - name: Install desktop packages
   ansible.builtin.apt:
     name: "{{ apps_apt_desktop }}"
     state: present
     install_recommends: true
+
+# The group is created by wireshark-common's postinst, and only when the
+# preseed above enabled it -- so this has to come after the install.
+- name: Add the workstation user to the wireshark group
+  ansible.builtin.user:
+    name: "{{ workstation_user }}"
+    groups: wireshark
+    append: true
+  when:
+    - desktop_wireshark_capture_as_user | bool
+    - "'wireshark' in apps_apt_desktop"
 
 - name: Boot to the graphical target
   ansible.builtin.file:

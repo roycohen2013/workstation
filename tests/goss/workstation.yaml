@@ -24,6 +24,8 @@ package:
   # Wi-Fi, and it is easy to lose by building "minimal" in a VM.
   linux-firmware:    { installed: true }
   tlp:               { installed: true }
+  wireshark:         { installed: true }
+  tshark:            { installed: true }
   fwupd:             { installed: true }
   # Needed by firstboot to resize the root partition on the target disk.
   cloud-guest-utils: { installed: true }
@@ -111,6 +113,19 @@ command:
     exit-status: 0
     stdout: ["disabled"]
 
+  # Wireshark is only useful if the workstation user can capture without sudo,
+  # and that hinges on a debconf answer that defaults to "no" on an unattended
+  # install. Assert the outcome, not the setting: postinst grants capture via
+  # setcap where the filesystem supports it and falls back to setuid otherwise,
+  # so either is a pass.
+  dumpcap-capture-enabled:
+    exec: |
+      getcap /usr/bin/dumpcap 2>/dev/null | grep -q cap_net_raw && echo enabled && exit 0
+      [ -u /usr/bin/dumpcap ] && echo enabled && exit 0
+      echo disabled
+    exit-status: 0
+    stdout: ["enabled"]
+
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:
     exec: "test -f /boot/grub/grub.cfg && echo present"
@@ -132,8 +147,12 @@ user:
   # workstation_user in group_vars does not silently stop testing anything.
   "{{ .Env.WS_USER }}":
     exists: true
-    groups: [sudo, docker]
+    groups: [sudo, docker, wireshark]
 
 group:
   docker:
+    exists: true
+  # Created by wireshark-common's postinst, but ONLY when non-root capture is
+  # enabled -- so its absence is the signal that the preseed did not take.
+  wireshark:
     exists: true
