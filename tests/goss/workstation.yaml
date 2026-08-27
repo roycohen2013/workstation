@@ -25,6 +25,7 @@ package:
   linux-firmware:    { installed: true }
   tlp:               { installed: true }
   claude-desktop:    { installed: true }
+  google-chrome-stable: { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }
   ovmf:              { installed: true }
@@ -138,6 +139,14 @@ command:
     exec: "test -s /usr/share/keyrings/claude-desktop-archive-keyring.asc && echo present"
     exit-status: 0
     stdout: ["present"]
+
+  # Chrome re-adds its own apt source unless told not to. If this file is
+  # missing or wrong, the image ships an apt config that rewrites itself on
+  # first update -- so assert the guard, not just the package.
+  chrome-not-self-managing-apt:
+    exec: "grep -q 'repo_add_once=\"false\"' /etc/default/google-chrome && echo guarded"
+    exit-status: 0
+    stdout: ["guarded"]
 
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:

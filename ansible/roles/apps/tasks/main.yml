@@ -82,6 +82,21 @@
   loop_control:
     label: "{{ item.name }}"
 
+# Chrome re-adds its own apt source and keyring -- from postinst and from a
+# daily cron job -- writing the same sources.list.d filename this role manages.
+# If its version wins and names a keyring we never created, every later apt
+# update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
+# that, so it has to exist BEFORE the package installs.
+- name: Stop Google Chrome managing its own apt source
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible (roles/apps) -- this repo owns the apt entry.
+      repo_add_once="false"
+      repo_reenable_on_distupgrade="false"
+    dest: /etc/default/google-chrome
+    mode: "0644"
+  when: workstation_chrome_enabled | bool
+
 - name: Install packages from third-party repositories
   ansible.builtin.apt:
     name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"

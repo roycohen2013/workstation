@@ -32,6 +32,7 @@ workstation_docker_enabled: true
 workstation_flatpak_enabled: true
 # Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 workstation_claude_desktop_enabled: true
+workstation_chrome_enabled: true
 workstation_firewall_enabled: true
 workstation_ssh_server_enabled: false   # laptops rarely want inbound SSH
 
@@ -171,6 +172,20 @@ apps_apt_repos:
       stable main
     packages:
       - claude-desktop
+
+  - name: google-chrome
+    enabled: "{{ workstation_chrome_enabled }}"
+    key_url: https://dl.google.com/linux/linux_signing_key.pub
+    # https rather than the http Google documents: apt verifies signatures
+    # either way, so this is about not advertising which packages we fetch.
+    # Suite is "stable" -- Google publishes one suite for all releases, so
+    # {{ ansible_distribution_release }} would 404 here (same as claude-desktop).
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg]
+      https://dl.google.com/linux/chrome/deb/
+      stable main
+    packages:
+      - google-chrome-stable
 
   - name: hashicorp
     enabled: true
