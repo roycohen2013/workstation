@@ -1,0 +1,17 @@
+# Managed by Ansible (roles/desktop) -- edit desktop_dconf in group_vars/all.yml
+#
+# Flat /a/b/c keys from group_vars are regrouped here into the [a/b] sections
+# that dconf's keyfile format expects.
+{% set sections = {} %}
+{%- for item in desktop_dconf %}
+{%- set path = item.key.strip('/').rsplit('/', 1)[0] %}
+{%- set name = item.key.strip('/').rsplit('/', 1)[1] %}
+{%- if sections.update({path: sections.get(path, []) + [(name, item.value)]}) %}{% endif %}
+{%- endfor %}
+{% for path in sections.keys() | sort %}
+[{{ path }}]
+{% for name, value in sections[path] %}
+{{ name }}={{ value }}
+{% endfor %}
+
+{% endfor %}

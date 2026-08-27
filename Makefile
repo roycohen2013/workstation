@@ -1,0 +1,181 @@
+# Workstation image build.
+#
+#   make image   build a bootable image from ansible/group_vars/all.yml
+#   make apply   converge THIS machine to the same config, without reimaging
+#
+# `make help` lists everything.
+
+SHELL := /bin/bash
+.DEFAULT_GOAL := help
+.ONESHELL:
+
+# 2026.08.27-a1b2c3d -- date for humans, sha so a build maps back to a commit.
+GIT_SHA     := $(shell git rev-parse --short HEAD 2>/dev/null || echo nogit)
+GIT_DIRTY   := $(shell test -n "$$(git status --porcelain 2>/dev/null)" && echo '-dirty' || echo '')
+VERSION     ?= $(shell date -u +%Y.%m.%d)-$(GIT_SHA)$(GIT_DIRTY)
+
+BUILD_DIR   ?= build
+IMAGE_NAME  ?= workstation
+ARTIFACT    := $(BUILD_DIR)/$(IMAGE_NAME)-$(VERSION)
+PLAYBOOK    := ansible/site.yml
+
+export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
+
+.PHONY: help
+help: ## Show this help
+	@echo "Workstation image build"
+	@echo
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@echo
+	@echo "  Version for this build: $(VERSION)"
+
+# --- Dependencies -------------------------------------------------------------
+
+.PHONY: deps
+deps: ## Install Ansible collections
+	ansible-galaxy collection install -r ansible/requirements.yml
+
+.PHONY: check-tools
+check-tools:
+	@missing=""
+	for t in packer qemu-img ansible-playbook; do
+	  command -v $$t >/dev/null || missing="$$missing $$t"
+	done
+	if [ -n "$$missing" ]; then
+	  echo "Missing required tools:$$missing"
+	  echo "  Ubuntu: sudo apt install qemu-utils qemu-system-x86 ovmf ansible"
+	  echo "  Packer: https://developer.hashicorp.com/packer/install"
+	  exit 1
+	fi
+	if [ ! -e /dev/kvm ]; then
+	  echo "/dev/kvm is missing -- the build needs hardware virtualisation."
+	  echo "Enable VT-x/AMD-V in firmware, and check you are in the 'kvm' group."
+	  exit 1
+	fi
+
+# --- Build --------------------------------------------------------------------
+
+.PHONY: init
+init: ## Install Packer plugins
+	packer init packer/
+
+.PHONY: image
+image: check-tools init deps ## Build the golden image (qcow2 + raw)
+	packer build \
+	  -var "version=$(VERSION)" \
+	  -var "image_name=$(IMAGE_NAME)" \
+	  -var "output_dir=$(BUILD_DIR)" \
+	  packer/
+	@echo
+	@echo "Built $(ARTIFACT).{qcow2,raw}.zst"
+	@ls -lh $(ARTIFACT)/ 2>/dev/null || true
+
+.PHONY: image-debug
+image-debug: check-tools init deps ## Build with the installer visible, for debugging
+	PACKER_LOG=1 packer build -var "version=$(VERSION)" -var "headless=false" \
+	  -on-error=ask packer/
+
+.PHONY: iso
+iso: ## Build the unattended installer ISO
+	VERSION=$(VERSION) scripts/build-iso.sh
+
+# --- Verify -------------------------------------------------------------------
+
+.PHONY: test
+test: ## Boot the built image in libvirt and check it comes up
+	@test -f "$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	  || { echo "No image for $(VERSION). Run 'make image' first."; exit 1; }
+	terraform -chdir=terraform/testlab init -input=false
+	terraform -chdir=terraform/testlab apply -auto-approve \
+	  -var "image_path=$(CURDIR)/$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	  -var "version=$(VERSION)"
+	@echo
+	@echo "VM booted and took a DHCP lease:"
+	@terraform -chdir=terraform/testlab output ip_address
+	@echo "Watch firstboot:  $$(terraform -chdir=terraform/testlab output -raw console_command)"
+	@echo "Tear down:        make test-down"
+
+.PHONY: test-down
+test-down: ## Destroy the test VM
+	terraform -chdir=terraform/testlab destroy -auto-approve \
+	  -var "image_path=/dev/null" -var "version=$(VERSION)"
+
+# --- Distribute ---------------------------------------------------------------
+
+.PHONY: publish
+publish: ## Upload the built image and move the channel pointer
+	VERSION=$(VERSION) scripts/publish-image.sh
+
+.PHONY: fetch
+fetch: ## Download the latest published image
+	scripts/fetch-image.sh
+
+.PHONY: flash
+flash: ## Write an image to a disk. Usage: make flash DEV=/dev/sdX
+	@test -n "$(DEV)" || { echo "Usage: make flash DEV=/dev/sdX"; exit 1; }
+	scripts/flash.sh --device $(DEV)
+
+# --- Apply to a running machine ----------------------------------------------
+
+.PHONY: apply
+apply: deps ## Converge THIS machine to the config (no reimage)
+	ansible-playbook $(PLAYBOOK) \
+	  -i localhost, -c local \
+	  -e workstation_phase=live \
+	  -e workstation_image_version=$(VERSION) \
+	  --ask-become-pass $(ARGS)
+
+.PHONY: apply-check
+apply-check: deps ## Show what `make apply` would change, without changing it
+	ansible-playbook $(PLAYBOOK) \
+	  -i localhost, -c local \
+	  -e workstation_phase=live \
+	  --check --diff --ask-become-pass $(ARGS)
+
+# --- Lint ---------------------------------------------------------------------
+
+.PHONY: lint
+lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell ## Run every linter
+
+.PHONY: lint-yaml
+lint-yaml:
+	yamllint -c .yamllint ansible/ tests/ iso/ packer/http/ .github/
+
+.PHONY: lint-ansible
+lint-ansible:
+	ansible-lint ansible/
+	ansible-playbook $(PLAYBOOK) -i localhost, -c local \
+	  -e workstation_phase=image --syntax-check
+
+.PHONY: lint-packer
+lint-packer:
+	packer fmt -check -diff packer/
+	packer validate -syntax-only packer/
+
+.PHONY: lint-terraform
+lint-terraform:
+	terraform fmt -check -recursive terraform/
+
+.PHONY: lint-shell
+lint-shell:
+	shellcheck scripts/*.sh tests/goss/*.sh
+
+.PHONY: fmt
+fmt: ## Reformat Packer and Terraform files in place
+	packer fmt packer/
+	terraform fmt -recursive terraform/
+
+# --- Housekeeping -------------------------------------------------------------
+
+.PHONY: clean
+clean: ## Remove build output (keeps the downloaded ISO cache)
+	rm -rf $(BUILD_DIR)/workstation-* $(BUILD_DIR)/downloads
+
+.PHONY: clean-all
+clean-all: ## Remove everything, including the cached installer ISO
+	rm -rf $(BUILD_DIR)
+
+.PHONY: version
+version: ## Print the version this build would use
+	@echo $(VERSION)

@@ -1,0 +1,90 @@
+---
+- name: Install development packages
+  ansible.builtin.apt:
+    name: "{{ apps_apt_dev }}"
+    state: present
+
+# fd and bat ship under alternate binary names on Debian/Ubuntu to avoid
+# clashes; link them to the names everyone actually types.
+- name: Link Debian-renamed binaries to their upstream names
+  ansible.builtin.file:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    state: link
+    force: true
+  loop:
+    - { src: /usr/bin/fdfind, dest: /usr/local/bin/fd }
+    - { src: /usr/bin/batcat, dest: /usr/local/bin/bat }
+  failed_when: false
+
+# --- Docker -------------------------------------------------------------------
+- name: Add user to the docker group
+  ansible.builtin.user:
+    name: "{{ workstation_user }}"
+    groups: docker
+    append: true
+  when: workstation_docker_enabled | bool
+
+- name: Enable docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: "{{ 'started' if workstation_phase == 'live' else omit }}"
+  when: workstation_docker_enabled | bool
+
+# --- Language runtimes --------------------------------------------------------
+# mise keeps toolchains in the user's home rather than the system, so runtime
+# versions can be bumped without a rebuild -- and so the image stays generic.
+- name: Install mise
+  ansible.builtin.get_url:
+    url: https://mise.run
+    dest: /tmp/mise-install.sh
+    mode: "0755"
+  when: dev_mise_enabled | bool
+
+- name: Run mise installer
+  become: true
+  become_user: "{{ workstation_user }}"
+  ansible.builtin.command:
+    cmd: sh /tmp/mise-install.sh
+    creates: "/home/{{ workstation_user }}/.local/bin/mise"
+  environment:
+    MISE_QUIET: "1"
+  when: dev_mise_enabled | bool
+
+- name: Declare global runtime versions
+  become: true
+  become_user: "{{ workstation_user }}"
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible (roles/dev) -- edit dev_mise_runtimes in group_vars
+      [tools]
+      {% for name, version in dev_mise_runtimes.items() %}
+      {{ name }} = "{{ version }}"
+      {% endfor %}
+    dest: "/home/{{ workstation_user }}/.config/mise/config.toml"
+    mode: "0644"
+  when: dev_mise_enabled | bool
+
+- name: Ensure mise config directory is owned correctly
+  ansible.builtin.file:
+    path: "/home/{{ workstation_user }}/.config/mise"
+    state: directory
+    owner: "{{ workstation_user }}"
+    group: "{{ workstation_user }}"
+    mode: "0755"
+  when: dev_mise_enabled | bool
+
+# Toolchain downloads are large and version-sensitive. Installing them at
+# first login instead of build time keeps the image smaller and means a stale
+# image still lands on current runtimes.
+- name: Install runtimes now (live phase only)
+  become: true
+  become_user: "{{ workstation_user }}"
+  ansible.builtin.command:
+    cmd: "/home/{{ workstation_user }}/.local/bin/mise install --yes"
+  register: dev_mise_install
+  changed_when: "'installing' in dev_mise_install.stdout | lower"
+  when:
+    - dev_mise_enabled | bool
+    - workstation_phase == 'live'

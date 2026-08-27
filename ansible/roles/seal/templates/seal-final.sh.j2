@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/seal)
+#
+# The last thing that runs inside the build VM. Packer invokes it as the
+# shutdown command via `systemd-run --no-block`, which detaches it from the
+# SSH session -- necessary because its first act is to delete the account that
+# session belongs to.
+
+set -uo pipefail
+exec >/dev/null 2>&1
+
+BUILD_USER="{{ workstation_build_user | default('packer') }}"
+
+# Remove the build account and its privileges. Its password is published in
+# this repo, so it must not survive into an artifact that gets uploaded and
+# flashed onto disks.
+pkill -KILL -u "$BUILD_USER" || true
+sleep 2
+userdel -r -f "$BUILD_USER" || true
+rm -f /etc/sudoers.d/90-packer-build
+rm -rf "/home/${BUILD_USER:?refusing to remove /home}"
+
+# Anything the teardown itself wrote.
+rm -f /root/.bash_history
+journalctl --rotate --vacuum-time=1s || true
+find /var/log -type f -exec truncate -s 0 {} + || true
+
+sync
+fstrim -av || true
+sync
+
+systemctl poweroff --force

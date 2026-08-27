@@ -1,0 +1,55 @@
+#cloud-config
+# Autoinstall seed embedded in the custom ISO.
+#
+# Different from packer/http/user-data on purpose. That one produces a blank
+# base for Packer to provision; this one installs onto real hardware and then
+# runs the very same Ansible playbook against itself, so an ISO install and a
+# flashed golden image converge on identical configuration.
+#
+# Placeholders (@NAME@) are substituted by scripts/build-iso.sh.
+autoinstall:
+  version: 1
+  interactive-sections: []
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: @KEYBOARD@
+
+  source:
+    id: ubuntu-server-minimal
+    search_drivers: true    # real hardware, unlike the build VM
+
+  storage:
+    layout:
+      name: direct
+    swap:
+      size: 0
+
+  identity:
+    hostname: @HOSTNAME@
+    username: @USERNAME@
+    password: "@PASSWORD_HASH@"
+
+  ssh:
+    install-server: false
+
+  packages:
+    - git
+    - python3
+    - python3-apt
+    - ansible
+
+  updates: security
+
+  # Converge the freshly installed system using this repo. Runs inside the
+  # installer with the target mounted at /target, so everything is chrooted.
+  late-commands:
+    - curtin in-target --target=/target -- git clone --depth 1 @REPO_URL@ /opt/workstation
+    - >-
+      curtin in-target --target=/target --
+      env ANSIBLE_CONFIG=/opt/workstation/ansible.cfg
+      ansible-playbook /opt/workstation/ansible/site.yml
+      -i localhost, -c local
+      -e workstation_phase=live
+      -e workstation_user=@USERNAME@
+    - curtin in-target --target=/target -- systemctl set-default graphical.target

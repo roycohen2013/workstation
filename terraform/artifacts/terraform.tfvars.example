@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars (gitignored) and fill in.
+#
+# The API token is better supplied as an environment variable:
+#   export CLOUDFLARE_API_TOKEN=...
+# so it never lands in a file at all.
+
+cloudflare_account_id = "your-cloudflare-account-id"
+bucket_name           = "workstation-artifacts"
+bucket_location       = "ENAM"

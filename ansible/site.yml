@@ -1,0 +1,55 @@
+---
+# The single entry point for configuring a workstation.
+#
+# Runs in two phases against identical role code:
+#   workstation_phase=image  -- inside the Packer build VM
+#   workstation_phase=live   -- against this running machine (`make apply`)
+#
+# Roles must stay idempotent and must not assume a build context. Anything
+# that only makes sense while building an artifact (installing the firstboot
+# hook, stripping machine identity) is gated on the phase below.
+- name: Configure workstation
+  hosts: all
+  become: true
+  gather_facts: true
+
+  pre_tasks:
+    - name: Validate build phase
+      ansible.builtin.assert:
+        that:
+          - workstation_phase in ['image', 'live']
+        fail_msg: >-
+          workstation_phase must be 'image' or 'live', got '{{ workstation_phase }}'.
+      tags: always
+
+    - name: Report what this run is doing
+      ansible.builtin.debug:
+        msg: >-
+          phase={{ workstation_phase }}
+          user={{ workstation_user }}
+          version={{ workstation_image_version }}
+          virtual={{ ansible_virtualization_role | default('unknown') }}
+      tags: always
+
+    - name: Refresh apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      tags: always
+
+  roles:
+    - { role: base, tags: [base] }
+    - { role: security, tags: [security] }
+    # desktop before apps: it installs flatpak and registers flathub, which
+    # the apps role then installs into.
+    - { role: desktop, tags: [desktop], when: workstation_desktop_enabled | bool }
+    - { role: apps, tags: [apps] }
+    # dev after apps: it adds the user to the docker group, which apps creates.
+    - { role: dev, tags: [dev] }
+    - { role: dotfiles, tags: [dotfiles] }
+    - { role: hardware, tags: [hardware] }
+
+    # Image-only. Arms the first-boot hook, then strips everything
+    # machine-specific so the artifact is a clean template.
+    - { role: firstboot, tags: [firstboot], when: workstation_phase == 'image' }
+    - { role: seal, tags: [seal], when: workstation_phase == 'image' }

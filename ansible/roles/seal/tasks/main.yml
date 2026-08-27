@@ -1,0 +1,118 @@
+---
+# Strips everything machine-specific and build-specific, turning a configured
+# VM into a generic, redistributable template. Image phase only.
+#
+# What is NOT done here: removing the build account. Packer is still logged in
+# as it and needs it to issue the shutdown. That final step runs from
+# workstation-seal-final, detached, as the shutdown command -- see below.
+
+- name: Confirm this is a build image
+  ansible.builtin.stat:
+    path: /etc/workstation-build-image
+  register: seal_build_marker
+
+- name: Refuse to seal anything that is not a build image
+  ansible.builtin.assert:
+    that: seal_build_marker.stat.exists
+    fail_msg: >-
+      /etc/workstation-build-image is missing. The seal role destroys machine
+      identity and must never run against a real workstation.
+
+- name: Record image metadata
+  ansible.builtin.copy:
+    content: |
+      WORKSTATION_VERSION={{ workstation_image_version }}
+      WORKSTATION_BUILD_DATE={{ workstation_build_date }}
+      WORKSTATION_UBUNTU={{ ansible_distribution_version }}
+      WORKSTATION_USER={{ workstation_user }}
+    dest: /etc/workstation-release
+    mode: "0644"
+
+# --- Package caches -----------------------------------------------------------
+- name: Clean apt caches
+  ansible.builtin.apt:
+    autoclean: true
+    autoremove: true
+
+- name: Remove apt lists
+  ansible.builtin.shell:
+    cmd: rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*.deb
+  changed_when: true
+
+# --- Machine identity ---------------------------------------------------------
+# Every machine written from this image must generate its own. Sharing a
+# machine-id means colliding DHCP leases and indistinguishable journal
+# identities across every laptop and VM built from the same artifact.
+- name: Blank machine-id
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ item }}"
+    mode: "0644"
+  loop:
+    - /etc/machine-id
+    - /var/lib/dbus/machine-id
+
+# The security role cannot do this during a build -- Packer is connected over
+# the very service it would be stopping -- so it lands here instead. Disabling
+# (not stopping) keeps the current session alive until shutdown.
+- name: Disable the SSH server in the image
+  ansible.builtin.systemd:
+    name: ssh
+    enabled: "{{ workstation_ssh_server_enabled | bool }}"
+  failed_when: false
+
+- name: Remove SSH host keys
+  ansible.builtin.shell:
+    cmd: rm -f /etc/ssh/ssh_host_*
+  changed_when: true
+
+# --- cloud-init ---------------------------------------------------------------
+# cloud-init did its job during the install. Left enabled, it would try to
+# reconfigure networking and users on the target machine at every boot.
+- name: Clean cloud-init state
+  ansible.builtin.command: cloud-init clean --logs --seed
+  changed_when: true
+  failed_when: false
+
+- name: Disable cloud-init
+  ansible.builtin.file:
+    path: /etc/cloud/cloud-init.disabled
+    state: touch
+    mode: "0644"
+
+# --- Logs and history ---------------------------------------------------------
+- name: Rotate away the journal
+  ansible.builtin.command: journalctl --rotate --vacuum-time=1s
+  changed_when: true
+  failed_when: false
+
+- name: Truncate log files
+  ansible.builtin.shell:
+    cmd: find /var/log -type f -exec truncate -s 0 {} + 2>/dev/null || true
+  changed_when: true
+
+- name: Remove shell history
+  ansible.builtin.shell:
+    cmd: rm -f /root/.bash_history /home/*/.bash_history /home/*/.zsh_history
+  changed_when: true
+
+- name: Remove build marker
+  ansible.builtin.file:
+    path: /etc/workstation-build-image
+    state: absent
+
+# --- Free space ---------------------------------------------------------------
+# fstrim punches holes in the qcow2 for deleted blocks (the builder sets
+# discard=unmap), so the exported artifact reflects real usage rather than
+# every byte ever written during the build.
+- name: Discard unused blocks
+  ansible.builtin.command: fstrim -av
+  changed_when: true
+  failed_when: false
+
+# --- Final teardown, executed at shutdown ------------------------------------
+- name: Install the final teardown script
+  ansible.builtin.template:
+    src: seal-final.sh.j2
+    dest: /usr/local/sbin/workstation-seal-final
+    mode: "0700"

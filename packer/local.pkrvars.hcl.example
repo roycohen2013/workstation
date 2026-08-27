@@ -1,0 +1,18 @@
+# Copy to local.pkrvars.hcl and adjust, then:
+#   packer build -var-file=packer/local.pkrvars.hcl packer/
+#
+# local.pkrvars.hcl is gitignored.
+
+# Give the build more of the host while it runs.
+cpus   = 8
+memory = 8192
+
+# Bigger base image if you bake in a lot of software.
+disk_size = "32G"
+
+# Watch the installer in a QEMU window when something goes wrong.
+# headless = false
+
+# Fedora / RHEL host firmware paths.
+# ovmf_code = "/usr/share/edk2/ovmf/OVMF_CODE.fd"
+# ovmf_vars = "/usr/share/edk2/ovmf/OVMF_VARS.fd"

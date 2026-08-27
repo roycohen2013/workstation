@@ -1,0 +1,102 @@
+---
+# Third-party APT repositories, snaps and flatpaks. Everything is driven by the
+# data in group_vars/all.yml -- adding software should never mean editing this
+# file.
+
+# --- Third-party APT repositories ---------------------------------------------
+- name: Ensure keyring directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: "0755"
+
+# `enabled` is usually a template referencing a feature switch, which renders
+# to a string. selectattr() would truth-test that string, and a non-empty
+# "False" is truthy -- silently enabling a repository that is switched off.
+# An explicit `| bool` is the only reliable test here.
+- name: Select enabled repositories
+  ansible.builtin.set_fact:
+    apps_repos_enabled: "{{ apps_repos_enabled + [item] }}"
+  loop: "{{ apps_apt_repos }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+# Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
+# signed-by, rather than added to the deprecated global trusted keyring where
+# any one vendor key would be trusted to sign any package.
+- name: Fetch repository signing keys
+  ansible.builtin.get_url:
+    url: "{{ item.key_url }}"
+    dest: "/tmp/{{ item.name }}.asc"
+    mode: "0644"
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install repository signing keys
+  ansible.builtin.command:
+    cmd: "gpg --batch --yes --dearmor -o /etc/apt/keyrings/{{ item.name }}.gpg /tmp/{{ item.name }}.asc"
+    creates: "/etc/apt/keyrings/{{ item.name }}.gpg"
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Set keyring permissions
+  ansible.builtin.file:
+    path: "/etc/apt/keyrings/{{ item.name }}.gpg"
+    mode: "0644"
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Add repositories
+  ansible.builtin.apt_repository:
+    repo: "{{ item.repo }}"
+    filename: "{{ item.name }}"
+    state: present
+    # Refresh inline rather than in a separate changed-gated task: the very
+    # next task installs from these repositories, and a handler would not run
+    # until the end of the play -- far too late.
+    update_cache: true
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Install packages from third-party repositories
+  ansible.builtin.apt:
+    name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"
+    state: present
+  when: apps_repos_enabled | length > 0
+
+- name: Remove downloaded key material
+  ansible.builtin.file:
+    path: "/tmp/{{ item.name }}.asc"
+    state: absent
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# --- Snaps --------------------------------------------------------------------
+- name: Install snaps
+  community.general.snap:
+    name: "{{ item.name }}"
+    classic: "{{ item.classic | default(false) }}"
+    state: present
+  loop: "{{ apps_snap }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: apps_snap | length > 0
+
+# --- Flatpaks -----------------------------------------------------------------
+- name: Install flatpaks
+  community.general.flatpak:
+    name: "{{ item }}"
+    remote: flathub
+    method: system
+    state: present
+  loop: "{{ apps_flatpak }}"
+  when:
+    - workstation_flatpak_enabled | bool
+    - workstation_desktop_enabled | bool
+    - apps_flatpak | length > 0

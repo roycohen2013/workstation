@@ -1,0 +1,87 @@
+---
+name: lint
+
+# Runs on every push. Deliberately does NOT build an image: a full build takes
+# 30-60 minutes and pushes several GB to object storage, which is not a
+# reasonable thing to do on every commit. See build.yml.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ansible:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ansible tooling
+        run: pip install --quiet ansible ansible-lint yamllint
+
+      - name: yamllint
+        run: yamllint -c .yamllint ansible/ tests/ iso/ packer/http/
+
+      - name: ansible-lint
+        run: ansible-lint ansible/
+
+      - name: Playbook syntax check (both phases)
+        run: |
+          for phase in image live; do
+            echo "--- phase=$phase"
+            ANSIBLE_CONFIG=ansible.cfg ansible-playbook ansible/site.yml \
+              -i localhost, -c local -e "workstation_phase=$phase" --syntax-check
+          done
+
+  packer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-packer@main
+        with:
+          version: "1.14.2"
+
+      - name: Format check
+        run: packer fmt -check -diff packer/
+
+      - name: Validate
+        run: |
+          packer init packer/
+          packer validate packer/
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.13.3"
+
+      - name: Format check
+        run: terraform fmt -check -recursive terraform/
+
+      # Validated per-directory: the two configs use different providers and
+      # have no shared state or module relationship.
+      - name: Validate
+        run: |
+          for dir in terraform/*/; do
+            echo "--- $dir"
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+          done
+
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck scripts/*.sh tests/goss/*.sh

@@ -1,0 +1,67 @@
+#cloud-config
+# Subiquity autoinstall seed. Packer serves this over HTTP to the installer.
+#
+# Deliberately minimal: this only needs to produce a bootable Ubuntu with an
+# SSH account Packer can reach. Everything that makes it a *workstation* --
+# desktop, applications, configuration -- is Ansible's job, so that the same
+# code also converges an already-running machine (`make apply`).
+autoinstall:
+  version: 1
+
+  # Fail loudly rather than dropping to an interactive prompt mid-build.
+  interactive-sections: []
+
+  locale: en_US.UTF-8
+  keyboard:
+    layout: us
+
+  # Smallest usable server base. Ansible installs the desktop on top.
+  source:
+    id: ubuntu-server-minimal
+    search_drivers: false
+
+  # GPT + FAT32 ESP + ext4 root, root last on the disk.
+  #
+  # "direct" (rather than "lvm") is a requirement, not a preference: firstboot
+  # grows the root partition onto whatever disk the image lands on, and plain
+  # growpart + resize2fs on the last partition is far simpler and safer to do
+  # unattended than growing a PV, LV and filesystem in sequence.
+  storage:
+    layout:
+      name: direct
+    swap:
+      size: 0
+
+  identity:
+    hostname: workstation-build
+    username: packer
+    # Throwaway build credential ("packer"). The account, its password and its
+    # sudoers entry are all removed by roles/seal before export, so this hash
+    # never reaches a finished image. It is not a secret.
+    password: "$6$gidWA1mBRsX987mj$axBUwobhgbCBA.ZJ3pt1qz0W6E5ybhaNYvnPEjk4KYBsWigMNGAPpPAzVUMzjZh2KVVeaDShIysx7MyKiJjXW1"
+
+  ssh:
+    install-server: true
+    allow-pw: true
+
+  # Only what the build itself needs; the rest comes from Ansible.
+  packages:
+    - python3
+    - python3-apt
+    - sudo
+
+  # Security updates only -- Ansible does a full upgrade, and doing it twice
+  # just makes the build slower.
+  updates: security
+
+  # Keep the installer from enabling snap-based extras we do not want baked in.
+  drivers:
+    install: false
+
+  late-commands:
+    # Passwordless sudo for the build account, so the Ansible provisioner and
+    # the shutdown command do not need to negotiate a TTY.
+    - echo 'packer ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/90-packer-build
+    - chmod 0440 /target/etc/sudoers.d/90-packer-build
+    # Marker so roles/seal can prove it is operating on a build image.
+    - touch /target/etc/workstation-build-image

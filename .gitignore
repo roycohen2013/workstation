@@ -1,0 +1,29 @@
+# Build output. Images are gigabytes; they belong in the artifact bucket.
+build/
+*.qcow2
+*.raw
+*.iso
+*.zst
+
+# Ansible
+ansible/.collections/
+*.retry
+
+# Terraform -- state can contain credentials and is never shared via git.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# Packer
+packer_cache/
+*.pkrvars.hcl
+!*.pkrvars.hcl.example
+
+# Local editor / OS noise
+.vscode/
+.idea/
+.DS_Store

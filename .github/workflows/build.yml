@@ -1,0 +1,98 @@
+---
+name: build image
+
+# Not run on push. A full image build takes 30-60 minutes and produces
+# multi-gigabyte artifacts, so it is triggered deliberately: on a release tag,
+# by hand, or on a weekly schedule to pick up upstream security updates.
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload the result to the artifact bucket"
+        type: boolean
+        default: false
+      channel:
+        description: "Channel to publish to"
+        type: string
+        default: stable
+  push:
+    tags: ["v*"]
+  schedule:
+    # Mondays 04:00 UTC -- a fresh image each week with the latest updates.
+    - cron: "0 4 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A full desktop install plus package downloads; well under the 6h ceiling
+    # but comfortably past the default.
+    timeout-minutes: 180
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check KVM is available
+        run: |
+          # GitHub's Linux runners expose /dev/kvm, but not to the runner user
+          # by default -- without this the build silently falls back to
+          # software emulation and takes hours instead of minutes.
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::/dev/kvm not present; this runner cannot build images"
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          kvm-ok || true
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            qemu-system-x86 qemu-utils ovmf xorriso zstd
+          pip install --quiet ansible
+
+      - uses: hashicorp/setup-packer@main
+        with:
+          version: "1.14.2"
+
+      - name: Compute version
+        id: version
+        run: echo "version=$(make version)" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        run: make image VERSION=${{ steps.version.outputs.version }}
+
+      - name: Summarise artifacts
+        run: |
+          {
+            echo "### Image \`${{ steps.version.outputs.version }}\`"
+            echo
+            echo '```'
+            ls -lh "build/workstation-${{ steps.version.outputs.version }}/"
+            echo '```'
+            echo
+            cat "build/workstation-${{ steps.version.outputs.version }}/SHA256SUMS"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Checksums and the manifest are small and worth keeping on the run even
+      # when the images themselves go to the bucket.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: checksums-${{ steps.version.outputs.version }}
+          path: |
+            build/workstation-*/SHA256SUMS
+            build/workstation-*/manifest.json
+          retention-days: 90
+
+      - name: Publish
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          WORKSTATION_BUCKET: ${{ secrets.WORKSTATION_BUCKET }}
+          WORKSTATION_CHANNEL: ${{ inputs.channel || 'stable' }}
+          AWS_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+        run: make publish VERSION=${{ steps.version.outputs.version }}

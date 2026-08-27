@@ -1,0 +1,60 @@
+---
+# Installs the hook that adapts a generic image to whatever machine it lands
+# on. Image phase only -- on a live machine this has already happened.
+
+- name: Install first-boot dependencies
+  ansible.builtin.apt:
+    name:
+      - cloud-guest-utils   # growpart
+      - gdisk               # sgdisk, for repairing the GPT after dd
+      - e2fsprogs
+      - grub-efi-amd64
+      - efibootmgr
+    state: present
+
+- name: Install first-boot script
+  ansible.builtin.template:
+    src: firstboot.sh.j2
+    dest: /usr/local/sbin/workstation-firstboot
+    mode: "0755"
+
+- name: Install first-boot service
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible (roles/firstboot)
+      [Unit]
+      Description=Adapt workstation image to this machine
+      After=local-fs.target network-online.target
+      Wants=network-online.target
+      ConditionPathExists=/var/lib/workstation/firstboot-pending
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      ExecStart=/usr/local/sbin/workstation-firstboot
+      StandardOutput=journal+console
+      StandardError=journal+console
+      TimeoutStartSec=600
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/workstation-firstboot.service
+    mode: "0644"
+
+- name: Create state directory
+  ansible.builtin.file:
+    path: /var/lib/workstation
+    state: directory
+    mode: "0755"
+
+- name: Arm the first-boot hook
+  ansible.builtin.file:
+    path: /var/lib/workstation/firstboot-pending
+    state: touch
+    mode: "0644"
+
+- name: Enable the first-boot service
+  ansible.builtin.systemd:
+    name: workstation-firstboot.service
+    enabled: true
+    daemon_reload: true

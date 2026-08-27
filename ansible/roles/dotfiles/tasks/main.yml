@@ -1,0 +1,41 @@
+---
+# Dotfiles are pulled at first login, never baked in.
+#
+# The image ships the chezmoi binary and a one-shot login hook; the repo
+# itself is cloned on the target machine. That keeps every personal detail --
+# git identity, tokens, host-specific config -- out of an artifact that gets
+# flashed onto disks and uploaded to a bucket.
+
+- name: Install chezmoi
+  ansible.builtin.shell:
+    cmd: sh -c "$(curl -fsSL https://get.chezmoi.io)" -- -b /usr/local/bin
+    creates: /usr/local/bin/chezmoi
+  when: dotfiles_enabled | bool
+
+- name: Install first-login dotfiles hook
+  ansible.builtin.template:
+    src: dotfiles-login.sh.j2
+    dest: /etc/profile.d/zz-workstation-dotfiles.sh
+    mode: "0644"
+  when:
+    - dotfiles_enabled | bool
+    - dotfiles_apply_on_login | bool
+    - dotfiles_repo | length > 0
+
+- name: Remove first-login hook when dotfiles are disabled
+  ansible.builtin.file:
+    path: /etc/profile.d/zz-workstation-dotfiles.sh
+    state: absent
+  when: not (dotfiles_enabled | bool) or dotfiles_repo | length == 0
+
+# On an already-running machine there is no reason to wait for a login.
+- name: Apply dotfiles now (live phase only)
+  become: true
+  become_user: "{{ workstation_user }}"
+  ansible.builtin.command:
+    cmd: "chezmoi init --apply --force {{ dotfiles_repo }}"
+    creates: "~/.local/share/chezmoi/.git"
+  when:
+    - dotfiles_enabled | bool
+    - dotfiles_repo | length > 0
+    - workstation_phase == 'live'

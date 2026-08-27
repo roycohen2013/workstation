@@ -1,0 +1,129 @@
+---
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ workstation_timezone }}"
+
+- name: Ensure locale is generated
+  community.general.locale_gen:
+    name: "{{ workstation_locale }}"
+    state: present
+
+- name: Set system locale
+  ansible.builtin.copy:
+    content: "LANG={{ workstation_locale }}\n"
+    dest: /etc/default/locale
+    mode: "0644"
+
+- name: Configure console keyboard layout
+  ansible.builtin.lineinfile:
+    path: /etc/default/keyboard
+    regexp: '^XKBLAYOUT='
+    line: 'XKBLAYOUT="{{ workstation_keyboard_layout }}"'
+    create: true
+    mode: "0644"
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ apps_apt_base }}"
+    state: present
+
+- name: Remove unwanted packages
+  ansible.builtin.apt:
+    name: "{{ apps_apt_absent }}"
+    state: absent
+    purge: true
+  when: apps_apt_absent | length > 0
+
+- name: Upgrade all packages
+  ansible.builtin.apt:
+    upgrade: dist
+    autoremove: true
+    autoclean: true
+
+# --- Account ------------------------------------------------------------------
+- name: Ensure login shell is installed
+  ansible.builtin.apt:
+    name: "{{ workstation_user_shell | basename }}"
+    state: present
+  when: workstation_user_shell is search('zsh|fish')
+
+- name: Create the workstation user
+  ansible.builtin.user:
+    name: "{{ workstation_user }}"
+    comment: "{{ workstation_user_fullname }}"
+    shell: "{{ workstation_user_shell }}"
+    groups: "{{ workstation_user_groups }}"
+    append: true
+    create_home: true
+    state: present
+
+- name: Grant passwordless sudo
+  ansible.builtin.copy:
+    content: "{{ workstation_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: "/etc/sudoers.d/50-{{ workstation_user }}"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Install authorized SSH keys
+  ansible.posix.authorized_key:
+    user: "{{ workstation_user }}"
+    key: "{{ item }}"
+    state: present
+  loop: "{{ workstation_authorized_keys }}"
+  when: workstation_authorized_keys | length > 0
+
+# --- Kernel tuning ------------------------------------------------------------
+- name: Apply sysctl settings
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/60-workstation.conf
+    sysctl_set: true
+    reload: true
+    state: present
+  loop: "{{ base_sysctl | dict2items }}"
+  # In a build VM some values cannot be applied to the live kernel; the file
+  # is still written and takes effect on the target machine at boot.
+  failed_when: false
+
+- name: Install zram-tools
+  ansible.builtin.apt:
+    name: zram-tools
+    state: present
+  when: base_zram_enabled | bool
+
+- name: Configure zram
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible (roles/base)
+      ALGO=zstd
+      PERCENT={{ base_zram_percent }}
+      PRIORITY=100
+    dest: /etc/default/zramswap
+    mode: "0644"
+  when: base_zram_enabled | bool
+  notify: Restart zramswap
+
+# --- Boot ---------------------------------------------------------------------
+# The single most important line in this repo for bare-metal portability.
+#
+# Ubuntu's default initramfs (MODULES=dep) contains only the storage drivers
+# the BUILD machine needed. Flash that onto a laptop with a different NVMe or
+# SATA controller and the kernel cannot find its own root filesystem -- an
+# unbootable image, with no obvious cause. MODULES=most ships the full driver
+# set and costs a few tens of MB.
+- name: Build a portable initramfs (MODULES=most)
+  ansible.builtin.lineinfile:
+    path: /etc/initramfs-tools/initramfs.conf
+    regexp: '^MODULES='
+    line: 'MODULES=most'
+    create: true
+    mode: "0644"
+  notify: Rebuild initramfs
+
+- name: Configure GRUB
+  ansible.builtin.template:
+    src: grub.j2
+    dest: /etc/default/grub
+    mode: "0644"
+  notify: Update grub

@@ -1,0 +1,24 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 120
+    allow-non-breakable-words: true
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ["true", "false"]
+    check-keys: false
+  braces:
+    max-spaces-inside: 1
+  # The goss suite aligns values into columns, which reads far better for a
+  # long list of assertions than single-space-after-colon would.
+  colons:
+    max-spaces-after: -1
+  octal-values:
+    forbid-implicit-octal: true
+
+ignore: |
+  build/
+  .collections/

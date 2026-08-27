@@ -1,0 +1,11 @@
+# Managed by Ansible (roles/dotfiles)
+# Applies dotfiles once, on the first interactive login after imaging.
+
+if [ -n "${PS1:-}" ] && [ "$(id -un)" = "{{ workstation_user }}" ]; then
+    if [ ! -e "$HOME/.local/share/chezmoi/.git" ] && [ -x /usr/local/bin/chezmoi ]; then
+        echo "==> Setting up dotfiles from {{ dotfiles_repo }}"
+        echo "    (one-time; ^C to skip, it will offer again next login)"
+        /usr/local/bin/chezmoi init --apply "{{ dotfiles_repo }}" || \
+            echo "    dotfiles setup failed -- run 'chezmoi init --apply {{ dotfiles_repo }}' by hand"
+    fi
+fi

@@ -1,0 +1,88 @@
+---
+- name: Install desktop packages
+  ansible.builtin.apt:
+    name: "{{ apps_apt_desktop }}"
+    state: present
+    install_recommends: true
+
+- name: Boot to the graphical target
+  ansible.builtin.file:
+    src: /lib/systemd/system/graphical.target
+    dest: /etc/systemd/system/default.target
+    state: link
+    force: true
+
+# --- GNOME settings -----------------------------------------------------------
+# Applied as system-wide dconf defaults rather than per-user `dconf write`.
+#
+# This is not a stylistic choice: `dconf write` needs a live D-Bus session bus,
+# and there is no logged-in session inside a Packer build VM. System defaults
+# in /etc/dconf/db/local.d apply without one, survive a new user being created,
+# and still leave every setting overridable by the user afterwards.
+- name: Ensure dconf profile directory exists
+  ansible.builtin.file:
+    path: /etc/dconf/profile
+    state: directory
+    mode: "0755"
+
+- name: Install dconf user profile
+  ansible.builtin.copy:
+    content: |
+      user-db:user
+      system-db:local
+    dest: /etc/dconf/profile/user
+    mode: "0644"
+  notify: Update dconf
+
+- name: Ensure dconf local db directory exists
+  ansible.builtin.file:
+    path: /etc/dconf/db/local.d
+    state: directory
+    mode: "0755"
+
+- name: Write GNOME defaults
+  ansible.builtin.template:
+    src: dconf-defaults.j2
+    dest: /etc/dconf/db/local.d/00-workstation
+    mode: "0644"
+  notify: Update dconf
+
+# --- Login manager ------------------------------------------------------------
+- name: Configure GDM
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible (roles/desktop)
+      [daemon]
+      WaylandEnable=true
+      {% if desktop_autologin %}
+      AutomaticLoginEnable=true
+      AutomaticLogin={{ workstation_user }}
+      {% endif %}
+
+      [security]
+
+      [xdmcp]
+
+      [chooser]
+
+      [debug]
+    dest: /etc/gdm3/custom.conf
+    mode: "0644"
+  failed_when: false
+
+# --- Flatpak ------------------------------------------------------------------
+- name: Install flatpak
+  ansible.builtin.apt:
+    name:
+      - flatpak
+      - gnome-software-plugin-flatpak
+    state: present
+  when: workstation_flatpak_enabled | bool
+
+- name: Add flathub remote
+  community.general.flatpak_remote:
+    name: flathub
+    state: present
+    flatpakrepo_url: https://dl.flathub.org/repo/flathub.flatpakrepo
+    method: system
+  when: workstation_flatpak_enabled | bool

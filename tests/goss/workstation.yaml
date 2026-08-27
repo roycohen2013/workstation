@@ -1,0 +1,139 @@
+---
+# Assertions run inside the image at the end of the Packer build, after the
+# seal role. A failure here fails the build, so a broken image is never
+# exported, checksummed or published.
+#
+# Two categories:
+#   1. The image contains what it should.
+#   2. The image does NOT contain what it must not -- build credentials,
+#      machine identity, anything that makes a shared artifact unsafe or
+#      makes every machine built from it identical.
+
+package:
+  # A representative slice of the declared package set; the full list lives in
+  # group_vars and is not duplicated here.
+  git:               { installed: true }
+  curl:              { installed: true }
+  zsh:               { installed: true }
+  ripgrep:           { installed: true }
+  build-essential:   { installed: true }
+  ubuntu-desktop-minimal: { installed: true }
+  gdm3:              { installed: true }
+  docker-ce:         { installed: true }
+  # Bare-metal portability: without linux-firmware a flashed laptop has no
+  # Wi-Fi, and it is easy to lose by building "minimal" in a VM.
+  linux-firmware:    { installed: true }
+  tlp:               { installed: true }
+  fwupd:             { installed: true }
+  # Needed by firstboot to resize the root partition on the target disk.
+  cloud-guest-utils: { installed: true }
+  gdisk:             { installed: true }
+  grub-efi-amd64:    { installed: true }
+
+file:
+  # --- The image is adaptable ------------------------------------------------
+  /usr/local/sbin/workstation-firstboot:
+    exists: true
+    mode: "0755"
+  /var/lib/workstation/firstboot-pending:
+    exists: true   # firstboot is armed; without this the image never adapts
+  /etc/workstation-release:
+    exists: true
+    contains:
+      - /^WORKSTATION_VERSION=/
+      - /^WORKSTATION_BUILD_DATE=/
+
+  # --- Bare-metal boot -------------------------------------------------------
+  # The one line that decides whether a flashed image finds its root disk on
+  # unfamiliar hardware.
+  /etc/initramfs-tools/initramfs.conf:
+    exists: true
+    contains:
+      - "MODULES=most"
+
+  # --- Desktop configuration -------------------------------------------------
+  /etc/dconf/db/local.d/00-workstation:
+    exists: true
+  /etc/dconf/profile/user:
+    exists: true
+    contains: ["system-db:local"]
+
+  # --- Machine identity is blank --------------------------------------------
+  # Non-empty here means every machine from this image shares an identity.
+  /etc/machine-id:
+    exists: true
+    size: 0
+  /var/lib/dbus/machine-id:
+    exists: true
+    size: 0
+
+  # --- cloud-init is out of the way -----------------------------------------
+  /etc/cloud/cloud-init.disabled:
+    exists: true
+
+  # --- Build residue is gone -------------------------------------------------
+  /etc/workstation-build-image:
+    exists: false
+  # Nothing personal may be baked into a redistributable artifact.
+  /root/.ssh/id_rsa:      { exists: false }
+  /root/.ssh/id_ed25519:  { exists: false }
+
+command:
+  # SSH host keys must be absent so each machine generates its own; shared host
+  # keys across machines defeat host verification entirely.
+  no-ssh-host-keys:
+    exec: "ls /etc/ssh/ssh_host_* 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]
+
+  # apt lists removed by the seal role.
+  apt-lists-cleared:
+    exec: "find /var/lib/apt/lists -type f -name '*Packages*' 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]
+
+  # The system boots to a desktop, not a text console.
+  graphical-default-target:
+    exec: "systemctl get-default"
+    exit-status: 0
+    stdout: ["graphical.target"]
+
+  # Power management stays off in the artifact; firstboot turns it on only if
+  # it finds real hardware.
+  tlp-disabled-in-image:
+    exec: "systemctl is-enabled tlp || true"
+    exit-status: 0
+    stdout: ["disabled"]
+
+  # A shipped image should not be listening for inbound SSH.
+  ssh-disabled-in-image:
+    exec: "systemctl is-enabled ssh || true"
+    exit-status: 0
+    stdout: ["disabled"]
+
+  # Sanity check that GRUB will actually be regenerated correctly.
+  grub-config-present:
+    exec: "test -f /boot/grub/grub.cfg && echo present"
+    exit-status: 0
+    stdout: ["present"]
+
+service:
+  # display-manager is the stable alias; the concrete unit name has moved
+  # between gdm.service and gdm3.service across releases.
+  display-manager:
+    enabled: true
+  docker:
+    enabled: true
+  workstation-firstboot:
+    enabled: true
+
+user:
+  # Templated from /etc/workstation-release rather than hardcoded, so renaming
+  # workstation_user in group_vars does not silently stop testing anything.
+  "{{ .Env.WS_USER }}":
+    exists: true
+    groups: [sudo, docker]
+
+group:
+  docker:
+    exists: true

@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+# Managed by Ansible (roles/firstboot)
+#
+# Runs once, on the first boot after this image is written to a machine --
+# virtual or physical. Everything here is something that CANNOT be baked into
+# a generic artifact because it depends on the specific hardware, disk, or
+# installation the image landed on.
+#
+# Failure of any single step is logged and skipped rather than fatal: a
+# machine that boots with an unresized root filesystem is recoverable, one
+# that fails to finish booting is not.
+
+set -uo pipefail
+
+MARKER=/var/lib/workstation/firstboot-pending
+STAMP=/var/lib/workstation/firstboot-completed
+
+log()  { echo "[firstboot] $*"; }
+warn() { echo "[firstboot] WARNING: $*" >&2; }
+
+[ -e "$MARKER" ] || { log "already completed; nothing to do"; exit 0; }
+
+log "starting (image {{ workstation_image_version }}, built {{ workstation_build_date }})"
+
+# --- 1. Grow the root filesystem ---------------------------------------------
+# The image is built on a small virtual disk. Written to a 1TB NVMe it would
+# otherwise stay that size, leaving the rest of the disk unallocated.
+grow_root() {
+    local src part_name disk partnum
+    src=$(findmnt -no SOURCE / 2>/dev/null) || return 1
+    part_name=$(basename "$src")
+    disk=$(lsblk -no PKNAME "$src" 2>/dev/null | head -1)
+    [ -n "$disk" ] || { warn "cannot identify parent disk of $src"; return 1; }
+    partnum=$(cat "/sys/class/block/${part_name}/partition" 2>/dev/null) || return 1
+
+    # dd'ing a small image onto a large disk leaves the GPT backup header in
+    # the middle of the device; sgdisk moves it to the end so the kernel sees
+    # the full disk and growpart has room to work.
+    sgdisk --move-second-header "/dev/${disk}" >/dev/null 2>&1 || true
+    partprobe "/dev/${disk}" >/dev/null 2>&1 || true
+
+    log "growing /dev/${disk} partition ${partnum}"
+    growpart "/dev/${disk}" "${partnum}" || log "partition already fills the disk"
+    resize2fs "$src" || warn "resize2fs failed on $src"
+}
+grow_root || warn "root filesystem was not resized"
+
+# --- 2. Regenerate machine identity ------------------------------------------
+# seal blanked these so every machine from this image does not share a
+# machine-id (which would collide DHCP leases and systemd journal identity).
+if [ ! -s /etc/machine-id ]; then
+    log "generating machine-id"
+    systemd-machine-id-setup || warn "machine-id generation failed"
+fi
+
+if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+    log "generating SSH host keys"
+    ssh-keygen -A || warn "SSH host key generation failed"
+fi
+
+# --- 3. Install the bootloader for THIS firmware ------------------------------
+# The image already boots -- this re-runs grub-install against the real disk so
+# the ESP matches the machine.
+#
+# --removable is the important flag. It writes /EFI/BOOT/BOOTX64.EFI, the
+# fallback path every UEFI implementation will boot without being told about
+# it. A normal install writes an NVRAM boot entry instead, and NVRAM lives in
+# the motherboard, not on the disk -- so it does not travel with a dd'd image
+# and the new laptop simply finds nothing to boot.
+if [ -d /sys/firmware/efi ]; then
+    if mountpoint -q /boot/efi; then
+        log "installing bootloader (removable path)"
+        grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+                     --removable --recheck || warn "removable grub-install failed"
+        # Best-effort NVRAM entry as well, so the machine shows a proper
+        # "Ubuntu" boot option. Harmless if the firmware refuses.
+        grub-install --target=x86_64-efi --efi-directory=/boot/efi \
+                     --bootloader-id=ubuntu --recheck >/dev/null 2>&1 || true
+        update-grub || warn "update-grub failed"
+    else
+        warn "/boot/efi is not mounted; skipping bootloader install"
+    fi
+else
+    warn "not booted via UEFI; skipping bootloader install"
+fi
+
+# --- 4. Hostname --------------------------------------------------------------
+current=$(hostnamectl --static 2>/dev/null || echo "")
+if [ -z "$current" ] || [ "$current" = "workstation-build" ] || [ "$current" = "localhost" ]; then
+    log "setting hostname to {{ workstation_hostname_default }}"
+    hostnamectl set-hostname "{{ workstation_hostname_default }}" || warn "hostname not set"
+fi
+
+# --- 5. Power management, on real hardware only -------------------------------
+# Left disabled in the image because tlp on a VM throttles a machine that has
+# no battery to save.
+virt=$(systemd-detect-virt 2>/dev/null || echo none)
+if [ "$virt" = "none" ]; then
+    log "physical hardware detected; enabling power management"
+    systemctl enable --now tlp thermald 2>/dev/null || warn "power services not enabled"
+    fwupdmgr refresh --force >/dev/null 2>&1 || true
+else
+    log "running under $virt; leaving power management disabled"
+fi
+
+# --- Done ---------------------------------------------------------------------
+date -uIs > "$STAMP"
+rm -f "$MARKER"
+systemctl disable workstation-firstboot.service >/dev/null 2>&1 || true
+log "complete"

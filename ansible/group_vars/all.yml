@@ -1,0 +1,256 @@
+---
+# =============================================================================
+#  WORKSTATION CONFIGURATION
+#
+#  This is the file to edit. Everything else in this repo is machinery that
+#  turns what is declared here into a bootable image.
+#
+#  Change something, then either:
+#    make image    -> build a fresh image carrying the change
+#    make apply    -> converge THIS running machine to it, no reimage needed
+# =============================================================================
+
+# --- Identity ----------------------------------------------------------------
+workstation_user: roy
+workstation_user_fullname: Roy Cohen
+workstation_user_shell: /usr/bin/zsh
+workstation_user_groups: [sudo, adm, dialout, plugdev, video, audio]
+
+workstation_hostname_default: workstation   # firstboot sets this on new machines
+workstation_timezone: America/New_York
+workstation_locale: en_US.UTF-8
+workstation_keyboard_layout: us
+
+# Public keys authorised for SSH into this machine. Leave empty to disable
+# key-based login. Private keys NEVER belong in this repo or the image.
+workstation_authorized_keys: []
+# - "ssh-ed25519 AAAA... roy@laptop"
+
+# --- Feature switches --------------------------------------------------------
+workstation_desktop_enabled: true
+workstation_docker_enabled: true
+workstation_flatpak_enabled: true
+workstation_firewall_enabled: true
+workstation_ssh_server_enabled: false   # laptops rarely want inbound SSH
+
+# Overridden to 'image' by Packer. Defaults to 'live' so `make apply` just works.
+workstation_phase: live
+workstation_image_version: dev
+workstation_build_date: unknown
+# Throwaway account Packer uses inside the build VM; roles/seal deletes it
+# before export. Declared here so the name lives in one place rather than only
+# in the Packer variables and the seal template's fallback.
+workstation_build_user: packer
+
+# =============================================================================
+#  APPLICATIONS
+#
+#  Three package sources, all declared as plain data. To add software, add a
+#  line -- no role edits required.
+# =============================================================================
+
+# --- APT: base system utilities ---------------------------------------------
+apps_apt_base:
+  - curl
+  - wget
+  - git
+  - git-lfs
+  - vim
+  - neovim
+  - tmux
+  - zsh
+  - htop
+  - btop
+  - tree
+  - unzip
+  - zip
+  - p7zip-full
+  - zstd
+  - rsync
+  - jq
+  - ripgrep
+  - fd-find
+  - fzf
+  - bat
+  - ncdu
+  - net-tools
+  - dnsutils
+  - traceroute
+  - nmap
+  - tcpdump
+  - socat
+  - pciutils
+  - usbutils
+  - lsof
+  - strace
+  - man-db
+  - less
+  - ca-certificates
+  - gnupg
+
+# --- APT: development --------------------------------------------------------
+apps_apt_dev:
+  - build-essential
+  - pkg-config
+  - cmake
+  - autoconf
+  - automake
+  - libtool
+  - gettext
+  - python3
+  - python3-pip
+  - python3-venv
+  - python3-dev
+  - sqlite3
+  - direnv
+  - shellcheck
+  - make
+
+# --- APT: desktop ------------------------------------------------------------
+# Ignored entirely when workstation_desktop_enabled is false.
+apps_apt_desktop:
+  - ubuntu-desktop-minimal
+  - gnome-tweaks
+  - gnome-shell-extension-manager
+  - dconf-editor
+  - fonts-firacode
+  - fonts-noto
+  - fonts-noto-color-emoji
+  - fonts-jetbrains-mono
+  - gnome-terminal
+  - nautilus
+  - eog
+  - evince
+  - vlc
+  - gimp
+  - flameshot
+  - xclip
+  - wl-clipboard
+
+# Packages to remove (Ubuntu ships a few things you may not want).
+apps_apt_absent:
+  - popularity-contest
+
+# --- APT: third-party repositories -------------------------------------------
+# Each entry adds a signed keyring and a sources.list.d entry. Keys are
+# dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
+apps_apt_repos:
+  - name: docker
+    enabled: "{{ workstation_docker_enabled }}"
+    key_url: https://download.docker.com/linux/ubuntu/gpg
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_distribution_release }} stable
+    packages:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+
+  - name: hashicorp
+    enabled: true
+    key_url: https://apt.releases.hashicorp.com/gpg
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/hashicorp.gpg]
+      https://apt.releases.hashicorp.com
+      {{ ansible_distribution_release }} main
+    packages:
+      - packer
+      - terraform
+
+# --- Snap --------------------------------------------------------------------
+apps_snap:
+  - { name: code, classic: true }
+
+# --- Flatpak (flathub) -------------------------------------------------------
+apps_flatpak:
+  - com.spotify.Client
+  - org.signal.Signal
+
+# --- Language runtimes, via mise ---------------------------------------------
+# mise installs per-user toolchains without polluting the system, and pins
+# versions in one place. Set to {} to skip.
+dev_mise_enabled: true
+dev_mise_runtimes:
+  node: lts
+  python: "3.13"
+  go: latest
+  rust: latest
+
+# =============================================================================
+#  DOTFILES
+#
+#  Managed with chezmoi. The image ships the chezmoi binary only -- the repo
+#  is pulled on first login, so nothing personal is baked into a flashable
+#  artifact and the same image is safe to share or re-flash anywhere.
+# =============================================================================
+dotfiles_enabled: true
+dotfiles_repo: ""            # e.g. https://github.com/roycohen2013/dotfiles.git
+dotfiles_apply_on_login: true
+
+# =============================================================================
+#  DESKTOP SETTINGS (GNOME, via dconf)
+#
+#  Applied for workstation_user. Values are GVariant literals, so strings need
+#  their own inner quotes: "'prefer-dark'".
+# =============================================================================
+desktop_dconf:
+  - { key: /org/gnome/desktop/interface/color-scheme, value: "'prefer-dark'" }
+  - { key: /org/gnome/desktop/interface/gtk-theme, value: "'Yaru-dark'" }
+  - { key: /org/gnome/desktop/interface/monospace-font-name, value: "'JetBrains Mono 11'" }
+  - { key: /org/gnome/desktop/interface/clock-show-seconds, value: "true" }
+  - { key: /org/gnome/desktop/interface/clock-show-weekday, value: "true" }
+  - { key: /org/gnome/desktop/interface/show-battery-percentage, value: "true" }
+  - { key: /org/gnome/desktop/peripherals/touchpad/tap-to-click, value: "true" }
+  - { key: /org/gnome/desktop/peripherals/touchpad/natural-scroll, value: "false" }
+  - { key: /org/gnome/desktop/wm/preferences/focus-mode, value: "'click'" }
+  - { key: /org/gnome/mutter/dynamic-workspaces, value: "false" }
+  - { key: /org/gnome/desktop/wm/preferences/num-workspaces, value: "4" }
+  - { key: /org/gnome/settings-daemon/plugins/power/sleep-inactive-ac-type, value: "'nothing'" }
+  - { key: /org/gnome/desktop/screensaver/lock-enabled, value: "true" }
+  - { key: /org/gnome/desktop/session/idle-delay, value: "uint32 300" }
+
+# Automatic login. Convenient on a personal laptop, weak on a stolen one.
+desktop_autologin: false
+
+# =============================================================================
+#  SECURITY
+# =============================================================================
+security_ufw_default_incoming: deny
+security_ufw_default_outgoing: allow
+security_ufw_allow: []       # e.g. [{ port: 22, proto: tcp, comment: ssh }]
+security_unattended_upgrades: true
+security_unattended_reboot: false
+
+# =============================================================================
+#  SYSTEM TUNING
+# =============================================================================
+base_zram_enabled: true
+base_zram_percent: 50
+base_sysctl:
+  vm.swappiness: 10
+  vm.max_map_count: 262144           # Electron apps, some games, ES
+  fs.inotify.max_user_watches: 524288 # file watchers in editors/bundlers
+  net.core.default_qdisc: fq
+  net.ipv4.tcp_congestion_control: bbr
+
+# =============================================================================
+#  HARDWARE (laptop)
+#
+#  Installed in every image, including VM builds, because the golden image is
+#  meant to be flashable onto metal. firstboot decides at runtime whether to
+#  actually enable the power/thermal services.
+# =============================================================================
+hardware_packages:
+  - fwupd
+  - tlp
+  - tlp-rdw
+  - thermald
+  - powertop
+  - linux-firmware
+  - intel-microcode
+  - amd64-microcode
+  - bluez
+  - blueman

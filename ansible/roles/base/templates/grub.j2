@@ -1,0 +1,15 @@
+# Managed by Ansible (roles/base)
+GRUB_DEFAULT=0
+GRUB_TIMEOUT_STYLE=menu
+GRUB_TIMEOUT=3
+GRUB_DISTRIBUTOR=`lsb_release -i -s 2> /dev/null || echo Debian`
+
+# No "quiet splash": on an image that gets flashed to unfamiliar hardware, a
+# visible boot log is the difference between diagnosing a failure and staring
+# at a purple screen.
+GRUB_CMDLINE_LINUX_DEFAULT=""
+GRUB_CMDLINE_LINUX=""
+
+# Show the menu even when this is the only OS, so recovery mode stays reachable.
+GRUB_DISABLE_OS_PROBER=false
+GRUB_RECORDFAIL_TIMEOUT=3
