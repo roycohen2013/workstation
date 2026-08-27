@@ -5,6 +5,10 @@ build/
 *.iso
 *.zst
 
+# Python byproducts (py_compile, imports)
+__pycache__/
+*.pyc
+
 # Ansible
 ansible/.collections/
 *.retry
