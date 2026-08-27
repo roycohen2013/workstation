@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: manifest
+  description: Records what was actually installed and fails the build on drift from group_vars.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

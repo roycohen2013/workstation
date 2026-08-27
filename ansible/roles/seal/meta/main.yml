@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: seal
+  description: Strips machine identity and build residue so the artifact is a clean template.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

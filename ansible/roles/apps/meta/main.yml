@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: apps
+  description: Third-party APT repositories, snaps and flatpaks, all declared as data.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

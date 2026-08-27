@@ -31,7 +31,9 @@ echo "==> Verifying local artifacts"
 
 echo "==> Uploading ${VERSION}"
 aws_s3 s3 sync "$SRC/" "s3://${WORKSTATION_BUCKET}/images/${VERSION}/" \
-    --exclude '*' --include '*.zst' --include 'SHA256SUMS' --include 'manifest.json'
+    --exclude '*' --include '*.zst' --include 'SHA256SUMS' --include 'manifest.json' \
+    --include 'workstation-manifest.json' --include 'workstation-declared.json' \
+    --include 'docs.html'
 
 # The pointer moves only after the upload succeeds, so a failed publish leaves
 # the channel on the previous good image rather than on a partial one.
@@ -56,4 +58,5 @@ fi
 
 echo
 echo "Published ${VERSION} to channel '${CHANNEL}'."
+echo "Image contents: s3://${WORKSTATION_BUCKET}/images/${VERSION}/docs.html"
 echo "Pull it elsewhere with: make fetch"

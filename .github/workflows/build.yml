@@ -84,6 +84,8 @@ jobs:
           path: |
             build/workstation-*/SHA256SUMS
             build/workstation-*/manifest.json
+            build/workstation-*/workstation-manifest.json
+            build/workstation-*/docs.html
           retention-days: 90
 
       - name: Publish

@@ -79,6 +79,28 @@ jobs:
             terraform -chdir="$dir" validate
           done
 
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install doc tooling
+        run: pip install --quiet docsible
+
+      - uses: hashicorp/setup-packer@main
+        with:
+          version: "1.14.2"
+
+      # Regenerates every committed doc and fails if anything moved. This is
+      # what stops docs/ being decorative -- without it nothing would ever
+      # notice the reference drifting away from the code it describes.
+      - name: Documentation is up to date
+        run: make lint-docs
+
   shell:
     runs-on: ubuntu-latest
     steps:

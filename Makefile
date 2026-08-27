@@ -133,10 +133,52 @@ apply-check: deps ## Show what `make apply` would change, without changing it
 	  -e workstation_phase=live \
 	  --check --diff --ask-become-pass $(ARGS)
 
+# --- Documentation -----------------------------------------------------------
+
+.PHONY: docs
+docs: ## Render the built image's contents as HTML and show where it is
+	@test -f "$(ARTIFACT)/workstation-manifest.json" \
+	  || { echo "No manifest for $(VERSION). Run 'make image' first."; exit 1; }
+	python3 scripts/render-docs.py \
+	  --manifest "$(ARTIFACT)/workstation-manifest.json" \
+	  --declared "$(ARTIFACT)/workstation-declared.json" \
+	  -o "$(ARTIFACT)/docs.html"
+	@echo "Open: $(ARTIFACT)/docs.html"
+
+.PHONY: docs-config
+docs-config: ## Regenerate the committed reference docs from source
+	@# docsible writes a README.md into each role directory, which is where
+	@# someone browsing that role on GitHub will look for it. It warns about
+	@# absent tests/test.yml on every role; that is expected, not a problem.
+	@for role in ansible/roles/*/; do \
+	  docsible --role "$$role" --comments --no-docsible --no-backup >/dev/null 2>&1 \
+	    || echo "  docsible failed for $$role"; \
+	done
+	python3 scripts/gen-config-docs.py
+
+.PHONY: docs-diff
+docs-diff: ## Compare two builds. Usage: make docs-diff FROM=<version> TO=<version>
+	@test -n "$(FROM)" -a -n "$(TO)" \
+	  || { echo "Usage: make docs-diff FROM=<version> TO=<version>"; exit 1; }
+	python3 scripts/render-docs.py \
+	  --diff "$(BUILD_DIR)/$(IMAGE_NAME)-$(FROM)/workstation-manifest.json" \
+	         "$(BUILD_DIR)/$(IMAGE_NAME)-$(TO)/workstation-manifest.json" \
+	  -o "$(BUILD_DIR)/diff-$(FROM)-to-$(TO).html"
+	@echo "Open: $(BUILD_DIR)/diff-$(FROM)-to-$(TO).html"
+
 # --- Lint ---------------------------------------------------------------------
 
 .PHONY: lint
-lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell ## Run every linter
+lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell lint-docs ## Run every linter
+
+.PHONY: lint-docs
+lint-docs: ## Fail if the committed docs are stale relative to source
+	@# Regenerates everything docs-config produces -- the role READMEs included,
+	@# since those are committed too -- and fails if anything moved. Without
+	@# this the docs are decorative: nothing would ever catch them drifting.
+	@$(MAKE) --no-print-directory docs-config >/dev/null
+	@git diff --exit-code --stat docs/ ansible/roles/*/README.md \
+	  || { echo "Docs are stale -- run 'make docs-config' and commit the result"; exit 1; }
 
 .PHONY: lint-yaml
 lint-yaml:

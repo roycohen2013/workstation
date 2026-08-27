@@ -131,6 +131,21 @@ build {
     ]
   }
 
+  # Pull the inventory out of the VM. roles/manifest wrote these inside the
+  # image (before seal, so package origins are still resolvable); these copies
+  # are what the HTML report is rendered from, without needing to boot anything.
+  provisioner "file" {
+    source      = "/etc/workstation-manifest.json"
+    destination = "${var.output_dir}/${local.artifact_name}/workstation-manifest.json"
+    direction   = "download"
+  }
+
+  provisioner "file" {
+    source      = "/etc/workstation-declared.json"
+    destination = "${var.output_dir}/${local.artifact_name}/workstation-declared.json"
+    direction   = "download"
+  }
+
   provisioner "shell" {
     inline = ["mkdir -p /tmp/goss"]
   }
@@ -163,6 +178,8 @@ build {
       "echo '==> Compressing'",
       "zstd -19 -T0 --rm -f \"$OUT/${local.artifact_name}.raw\" -o \"$OUT/${local.artifact_name}.raw.zst\"",
       "zstd -19 -T0 -f \"$OUT/${local.artifact_name}.qcow2\" -o \"$OUT/${local.artifact_name}.qcow2.zst\"",
+      "echo '==> Rendering documentation'",
+      "python3 scripts/render-docs.py --manifest \"$OUT/workstation-manifest.json\" --declared \"$OUT/workstation-declared.json\" -o \"$OUT/docs.html\"",
       "echo '==> Checksums'",
       "(cd \"$OUT\" && sha256sum ${local.artifact_name}.* > SHA256SUMS)",
       "cat \"$OUT/SHA256SUMS\"",

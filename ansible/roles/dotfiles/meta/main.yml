@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: dotfiles
+  description: Installs chezmoi and applies dotfiles at first login, never baking them in.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

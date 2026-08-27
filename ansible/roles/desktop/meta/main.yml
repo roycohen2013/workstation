@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: desktop
+  description: GNOME desktop, fonts, dconf system defaults and Flatpak support.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []
