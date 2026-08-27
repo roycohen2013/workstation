@@ -18,7 +18,7 @@ This repo builds a workstation image from a declarative config. Almost every cha
 a user asks for is **one or two lines of data** in `ansible/group_vars/all.yml` — the
 roles are machinery that consumes that data and rarely need touching.
 
-Work in five steps: locate → plan → edit → verify → ship. The plan gets explicit
+Work in seven steps: locate → trace → ask → plan → edit → verify → ship. The plan gets explicit
 approval before any file is edited; verification runs before anything is committed.
 
 ## Why verification comes before the commit
@@ -67,7 +67,59 @@ Two placements deserve a second thought:
   deliberate — the golden image gets flashed onto metal, and a VM-built image missing
   `linux-firmware` is a laptop with no Wi-Fi. Don't "optimise" it away.
 
-## Step 2 — Ask only what changes the diff
+## Step 2 — Trace what else the change touches
+
+Routing a change to the right list is the easy half. What bites is the
+consequence that lands somewhere the placement table never points.
+
+The frame that generates the right questions: **this repo builds one image that
+gets flashed onto many machines.** Anything a package writes at install time is
+baked into the artifact and then shared by every machine built from it. On a
+single laptop that would be harmless; here it is a defect.
+
+Three questions. Each has a real failure behind it.
+
+**1. Does installing this create machine-specific state?**
+
+Daemons generate identity the first time they start — node keys, host keys,
+instance IDs, licence activations — and systemd presets mean most packages start
+their service at install time, inside the build VM. That state then ships.
+
+> Adding `tailscale` starts `tailscaled`, which writes a node key to
+> `/var/lib/tailscale`. Every laptop flashed from that image claims the *same*
+> tailnet node. The fix belongs in `roles/seal` (strip it), and sometimes
+> `roles/firstboot` (regenerate it) — exactly how machine-id and SSH host keys
+> are already handled.
+
+**2. Does this need to be true in the image, or only on a running machine?**
+
+Roles run in both phases, but a task gated `when: workstation_phase == 'live'`
+never reaches the artifact. A flashed machine boots with whatever the image
+contains, long before anything runs `make apply`.
+
+> Enabling sshd while its hardening config is written live-only means a freshly
+> flashed laptop boots sshd with stock configuration.
+
+**3. Does anything already assert the old behaviour?**
+
+`tests/goss/workstation.yaml` runs inside the build and fails it. A change that
+contradicts an assertion turns a working config into a red build.
+
+> `ssh-disabled-in-image` asserts sshd is disabled. Enabling it fails the build
+> until that assertion moves too.
+
+Two more worth carrying:
+
+- **`ufw allow` is additive.** Narrowing an existing rule leaves the wider one in
+  place unless it is explicitly removed — the port keeps answering everyone.
+- **The ISO path is not the golden-image path.** `iso/nocloud/user-data.tmpl`
+  sets `install-server: false`, so it inherits nothing the Packer build set up.
+
+Most changes genuinely are just a line in a list. When all three answers are
+"nothing", say so in the plan in a few words and move on — the value is in having
+asked, not in manufacturing work.
+
+## Step 3 — Ask only what changes the diff
 
 Ask a follow-up when different answers produce genuinely different edits. Otherwise
 pick the sensible default, state it in the plan, and move on — the plan is where the
@@ -86,7 +138,7 @@ Worth asking:
 Not worth asking: which of `apps_apt_base` vs `apps_apt_dev` a tool belongs in, whether
 to alphabetise, or whether to rebuild afterwards. Decide, and note it in the plan.
 
-## Step 3 — Present the plan, then wait
+## Step 4 — Present the plan, then wait
 
 Keep it short enough to read in one glance. The user is approving a diff, not a design
 document.
@@ -99,21 +151,30 @@ document.
 
 **Why a repo, not apt** — Ubuntu's archive tailscale lags upstream by months.
 
-**Also** — opens nothing in the firewall; Tailscale needs no inbound rule.
+**Also touches** — `roles/seal`: installing the deb starts tailscaled, which
+  writes a node key to /var/lib/tailscale. Left in, every machine flashed from
+  this image claims the same tailnet node, so seal has to strip it.
 
 **Verify** — verify-change.sh repo + make lint. No image build (needs KVM, ~45 min).
 
 OK to proceed?
 ```
 
+The **Also touches** line carries the Step 2 answers. It is the part most worth
+getting right: it is where a one-line data change reveals itself as something
+bigger, at the point the user can still redirect it. When Step 2 found nothing,
+say so in a few words ("**Also touches** — nothing; pure data, no daemon, no
+assertion affected") rather than dropping the line, so its absence never has to be
+guessed at.
+
 Always state what verification will and will not cover. "Verified" must never be heard
-as "built and booted" — see Step 5.
+as "built and booted" — see Step 6.
 
 Then stop and wait for approval. If the user asked for several things at once and some
 need clarification, propose the parts that are clear and flag the rest rather than
 blocking the whole batch.
 
-## Step 4 — Make the edit
+## Step 5 — Make the edit
 
 Match the file's existing style: same list, same indentation, grouped with related
 entries rather than appended to the end.
@@ -151,7 +212,7 @@ Gotchas that pass lint and fail at build time:
 - **Debian renames some binaries.** `fd` ships as `fdfind`, `bat` as `batcat`. If a new
   package does this, add a symlink alongside the existing ones in `roles/dev`.
 
-## Step 5 — Verify
+## Step 6 — Verify
 
 Two tiers always run. The third is the user's call.
 
@@ -193,7 +254,7 @@ package with heavy dependencies, anything touching a role — and let the user d
 Whatever ran, report it plainly. If only tiers 1 and 2 ran, say the change is
 lint-clean and the package exists, and that no image was built.
 
-## Step 6 — Commit and push
+## Step 7 — Commit and push
 
 Commit only after verification passes. Stage the specific files changed, not `-A`.
 

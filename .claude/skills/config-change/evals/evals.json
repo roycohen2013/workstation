@@ -30,7 +30,9 @@
         "The entry has an 'enabled' key set to a real boolean or bool-rendering template",
         "The repo key URL and suite were verified against the live Tailscale repo before committing",
         "All added YAML lines stay within the 120-character yamllint limit (folded scalar used)",
-        "make lint passes on the resulting tree"
+        "make lint passes on the resulting tree",
+        "Identifies that installing tailscale starts tailscaled and bakes a node key into the image",
+        "Handles that state: roles/seal strips it, or the daemon is kept from starting during the build"
       ]
     },
     {
@@ -59,7 +61,10 @@
         "Does NOT silently add a rule that opens SSH to the entire internet",
         "Notes that workstation_ssh_server_enabled defaults to false and must be flipped for SSH to work at all",
         "Either extends the security role to support a source, or clearly flags the limitation instead of faking it",
-        "make lint passes on the resulting tree (if any change was made)"
+        "make lint passes on the resulting tree (if any change was made)",
+        "sshd hardening reaches the image, not only the live phase",
+        "Accounts for the goss ssh-disabled-in-image assertion that would otherwise fail the build",
+        "Accounts for 'ufw allow' being additive, so the wider rule does not survive"
       ]
     }
   ]

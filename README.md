@@ -179,12 +179,19 @@ with `/config-change`.
 It then walks a fixed path:
 
 1. **Works out where the change belongs** — which list, or whether it needs a role.
-2. **Asks a follow-up** only when the answer changes the edit (e.g. VS Code exists
+2. **Traces what else it touches.** Adding a daemon is rarely just a package: this
+   repo builds *one* image flashed onto *many* machines, so anything a package
+   writes at install time gets shared by all of them. Installing Tailscale, for
+   instance, starts `tailscaled`, which bakes a node key into the image — so
+   `roles/seal` has to strip it.
+3. **Asks a follow-up** only when the answer changes the edit (e.g. VS Code exists
    as a snap, a flatpak, *and* a Microsoft apt repo — those are not equivalent).
-3. **Shows you a short plan and waits.** Nothing is edited before you approve.
-4. **Makes the edit**, matching the file's existing style.
-5. **Verifies**, then runs `make lint`.
-6. **Commits and pushes**, with a message explaining *why*, not just what.
+4. **Shows you a short plan and waits.** Nothing is edited before you approve, and
+   the plan names anything from step 2 so a one-liner cannot quietly become a
+   change to a role.
+5. **Makes the edit**, matching the file's existing style.
+6. **Verifies**, then runs `make lint`.
+7. **Commits and pushes**, with a message explaining *why*, not just what.
 
 **What step 5 is really for.** The expensive mistake in this repo is a name that
 does not exist. Nothing catches it at edit time — `apt install` dies deep inside a
