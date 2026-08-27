@@ -135,6 +135,10 @@ apply-check: deps ## Show what `make apply` would change, without changing it
 
 # --- Documentation -----------------------------------------------------------
 
+.PHONY: verify-repos
+verify-repos: ## Check every third-party apt repo declared in group_vars
+	python3 scripts/verify-repos.py
+
 .PHONY: docs
 docs: ## Render the built image's contents as HTML and show where it is
 	@test -f "$(ARTIFACT)/workstation-manifest.json" \
