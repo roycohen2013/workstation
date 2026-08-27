@@ -116,7 +116,24 @@ def main():
         worst = 1 if 1 in (worst, rc) else max(worst, rc)
         print()
 
-    verdict = {0: "all repositories verified",
+    # 1Password derives its debsig policy directory from the long ID of its
+    # signing key. Nothing about the repository check touches that, and a wrong
+    # value fails silently -- the policy lands where dpkg never looks and the
+    # install still succeeds -- so it is checked against the published key here.
+    debsig = data.get("apps_1password_debsig_key_id")
+    onepw = next((r for r in repos if r.get("name") == "1password"), None)
+    if debsig and onepw and not a.only:
+        print("--- 1password debsig key id")
+        rc = subprocess.run(
+            ["bash", str(VERIFY), "keyid", onepw.get("key_url", ""), str(debsig)]
+        ).returncode
+        if rc not in (0, 1, 2):
+            print(f"  ! verify-change.sh exited {rc} -- the check did not run")
+            rc = 1
+        worst = 1 if 1 in (worst, rc) else max(worst, rc)
+        print()
+
+    verdict = {0: "all repositories and key ids verified",
                1: "at least one repository is WRONG -- fix before building",
                2: "some repositories could not be checked (network blocked) -- "
                   "none were found wrong"}.get(worst, f"unexpected status {worst}")

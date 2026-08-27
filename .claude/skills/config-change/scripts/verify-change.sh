@@ -12,6 +12,7 @@
 #   verify-change.sh snap     <name>...
 #   verify-change.sh flatpak  <app-id>...
 #   verify-change.sh repo     <key-url> <base-url> <suite> [component]
+#   verify-change.sh keyid    <key-url> [expected-long-id]
 #
 # Exit codes carry meaning -- treat them differently:
 #   0  everything checked exists
@@ -216,6 +217,38 @@ verify_repo() {
     return $status
 }
 
+# --- signing key id -----------------------------------------------------------
+# Some vendors derive a path from their signing key's long ID -- 1Password's
+# debsig policy lives in a directory named after it. A wrong value there fails
+# silently: the files land where dpkg never looks, the policy is inert, and
+# apt install still succeeds. Nothing about the repository itself catches that,
+# so the key ID gets its own check.
+verify_keyid() {
+    local key_url="$1" expected="${2:-}" tmp ids
+    tmp=$(mktemp)
+    if ! $CURL "$key_url" -o "$tmp" 2>/dev/null || [ ! -s "$tmp" ]; then
+        unknown "key id: could not fetch $key_url"
+        rm -f "$tmp"; return 2
+    fi
+    # Field 5 of a pub record is the 16-hex-character long key ID.
+    ids=$(gpg --show-keys --with-colons "$tmp" 2>/dev/null | awk -F: '$1=="pub"{print $5}')
+    rm -f "$tmp"
+    if [ -z "$ids" ]; then
+        bad "key id: fetched $key_url but it is not a usable GPG key"
+        return 1
+    fi
+    if [ -z "$expected" ]; then
+        ok "key id: $(echo "$ids" | tr '\n' ' ')"
+        return 0
+    fi
+    if grep -qix "$expected" <<<"$ids"; then
+        ok "key id: $expected matches the published signing key"
+        return 0
+    fi
+    bad "key id: expected $expected, but the key publishes: $(echo "$ids" | tr '\n' ' ')"
+    return 1
+}
+
 # --- dispatch -----------------------------------------------------------------
 [ $# -ge 2 ] || { sed -n '2,30p' "$0" | sed 's/^# \?//'; exit 64; }
 
@@ -225,5 +258,6 @@ case "$kind" in
     snap)    verify_snap "$@" ;;
     flatpak) verify_flatpak "$@" ;;
     repo)    verify_repo "$@" ;;
-    *) echo "unknown check '$kind' (expected: apt, snap, flatpak, repo)" >&2; exit 64 ;;
+    keyid)   verify_keyid "$@" ;;
+    *) echo "unknown check '$kind' (expected: apt, snap, flatpak, repo, keyid)" >&2; exit 64 ;;
 esac
