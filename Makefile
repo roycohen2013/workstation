@@ -159,7 +159,7 @@ lint-terraform:
 
 .PHONY: lint-shell
 lint-shell:
-	shellcheck scripts/*.sh tests/goss/*.sh
+	shellcheck scripts/*.sh tests/goss/*.sh .claude/skills/*/scripts/*.sh
 
 .PHONY: fmt
 fmt: ## Reformat Packer and Terraform files in place
