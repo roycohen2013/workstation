@@ -86,14 +86,14 @@ Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 1Password additionally documents a debsig-verify policy, which checks the
 .deb's own signature on top of apt's repository signature. The policy lives
 in a directory named after 1Password's signing key ID.
-UNVERIFIED: this value was written from recall, not read from 1Password's
-documentation -- support.1password.com and downloads.1password.com are both
-unreachable from the environment this was authored in. It is isolated here
-so correcting it is a one-line change. Confirm against
-https://support.1password.com/install-linux/ before trusting it; if it is
-wrong the policy is simply inert (dpkg only enforces debsig when configured
-to), so apt install still succeeds -- which is exactly why a wrong value
-here would go unnoticed.
+Written from recall rather than read from 1Password's documentation, which
+was unreachable when this was authored. The repository itself has since been
+verified (key, suite and component all resolve); this ID has not, because it
+is a directory name rather than a repository property.
+A wrong value fails silently: the policy lands where dpkg never looks, so it
+is inert and apt install still succeeds. `make verify-repos` now checks it
+against the long ID of the published signing key, which is what the
+directory name is derived from.
 
 ### `workstation_firewall_enabled`
 
