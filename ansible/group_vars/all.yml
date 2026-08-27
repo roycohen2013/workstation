@@ -30,6 +30,8 @@ workstation_authorized_keys: []
 workstation_desktop_enabled: true
 workstation_docker_enabled: true
 workstation_flatpak_enabled: true
+# Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
+workstation_claude_desktop_enabled: true
 workstation_firewall_enabled: true
 workstation_ssh_server_enabled: false   # laptops rarely want inbound SSH
 
@@ -150,6 +152,25 @@ apps_apt_repos:
       - containerd.io
       - docker-buildx-plugin
       - docker-compose-plugin
+
+  - name: claude-desktop
+    enabled: "{{ workstation_claude_desktop_enabled }}"
+    key_url: https://downloads.claude.ai/claude-desktop/key.asc
+    # This vendor documents an exact keyring path, and its package registers
+    # its own sources.list.d entry pointing there. Matching it means apt keeps
+    # working whichever entry ends up on disk -- see roles/apps.
+    key_armoured: true
+    key_path: /usr/share/keyrings/claude-desktop-archive-keyring.asc
+    # Suite is literally "stable" -- NOT {{ ansible_distribution_release }}.
+    # This repo publishes one suite for all releases, so templating the Ubuntu
+    # codename here would 404. Key fingerprint per Anthropic's docs:
+    #   31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
+    repo: >-
+      deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
+      https://downloads.claude.ai/claude-desktop/apt/stable
+      stable main
+    packages:
+      - claude-desktop
 
   - name: hashicorp
     enabled: true

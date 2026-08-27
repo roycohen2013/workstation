@@ -206,8 +206,13 @@ Gotchas that pass lint and fail at build time:
     https://pkgs.tailscale.com/stable/ubuntu
     {{ ansible_distribution_release }} main
   ```
-  Prefer `{{ ansible_distribution_release }}` over a hardcoded codename so the entry
-  survives the next Ubuntu upgrade.
+  **Check which suite the vendor actually publishes before templating it.**
+  `{{ ansible_distribution_release }}` is right for vendors that ship per-codename
+  suites (Docker, HashiCorp) and survives the next Ubuntu upgrade. But some
+  publish a *single* suite for every release — Anthropic's `claude-desktop` repo
+  uses `stable` — and templating the codename there produces a 404 at
+  `apt update`. `verify-change.sh repo` settles it in two seconds; the failure
+  looks identical either way, so guessing costs a build.
 
 - **Debian renames some binaries.** `fd` ships as `fdfind`, `bat` as `batcat`. If a new
   package does this, add a symlink alongside the existing ones in `roles/dev`.

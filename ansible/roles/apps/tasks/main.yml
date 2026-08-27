@@ -34,17 +34,36 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: Install repository signing keys
+# Most vendors ship an armoured key that we dearmour to a .gpg. A few document
+# an exact keyring path and format of their own, and their package's postinst
+# may register its own sources.list.d entry pointing at that path -- overwriting
+# ours. If the file it names does not exist, every later apt update fails with
+# NO_PUBKEY. So an entry may set key_path (and key_armoured) to match the
+# vendor's documented layout exactly; the default keeps the dearmoured
+# behaviour every existing entry relies on.
+- name: Install repository signing keys (dearmoured, default)
   ansible.builtin.command:
     cmd: "gpg --batch --yes --dearmor -o /etc/apt/keyrings/{{ item.name }}.gpg /tmp/{{ item.name }}.asc"
     creates: "/etc/apt/keyrings/{{ item.name }}.gpg"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+  when: not (item.key_armoured | default(false) | bool)
+
+- name: Install repository signing keys (armoured, at the vendor's own path)
+  ansible.builtin.copy:
+    src: "/tmp/{{ item.name }}.asc"
+    dest: "{{ item.key_path }}"
+    remote_src: true
+    mode: "0644"
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.key_armoured | default(false) | bool
 
 - name: Set keyring permissions
   ansible.builtin.file:
-    path: "/etc/apt/keyrings/{{ item.name }}.gpg"
+    path: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
     mode: "0644"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
@@ -76,6 +95,21 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+
+# Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
+# It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
+# the latter -- so joining the group is required even where /dev/kvm alone is
+# already accessible.
+#
+# This lives here, not in workstation_user_groups, because roles/base creates
+# the user long before these packages exist: the kvm group is created by the
+# qemu recommends pulled in just above, so joining it any earlier fails.
+- name: Add the workstation user to the kvm group for Cowork
+  ansible.builtin.user:
+    name: "{{ workstation_user }}"
+    groups: kvm
+    append: true
+  when: workstation_claude_desktop_enabled | bool
 
 # --- Snaps --------------------------------------------------------------------
 - name: Install snaps

@@ -24,6 +24,10 @@ package:
   # Wi-Fi, and it is easy to lose by building "minimal" in a VM.
   linux-firmware:    { installed: true }
   tlp:               { installed: true }
+  claude-desktop:    { installed: true }
+  # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
+  qemu-system-x86:   { installed: true }
+  ovmf:              { installed: true }
   wireshark:         { installed: true }
   tshark:            { installed: true }
   fwupd:             { installed: true }
@@ -126,6 +130,15 @@ command:
     exit-status: 0
     stdout: ["enabled"]
 
+  # The vendor's package registers its own sources.list.d entry pointing at a
+  # keyring path it documents. If that file is missing, every apt update on the
+  # finished machine fails with NO_PUBKEY -- so assert the key is where the
+  # vendor expects it, not merely where our role would default to putting it.
+  claude-desktop-keyring-at-vendor-path:
+    exec: "test -s /usr/share/keyrings/claude-desktop-archive-keyring.asc && echo present"
+    exit-status: 0
+    stdout: ["present"]
+
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:
     exec: "test -f /boot/grub/grub.cfg && echo present"
@@ -147,7 +160,7 @@ user:
   # workstation_user in group_vars does not silently stop testing anything.
   "{{ .Env.WS_USER }}":
     exists: true
-    groups: [sudo, docker, wireshark]
+    groups: [sudo, docker, wireshark, kvm]
 
 group:
   docker:
