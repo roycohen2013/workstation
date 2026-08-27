@@ -64,6 +64,19 @@ def main():
         print(f"error: {VERIFY} not found", file=sys.stderr)
         return 1
 
+    # A CRLF checkout makes the shebang "bash\r", which fails with a message
+    # that names a file that is plainly present. Detect it and say what to do,
+    # rather than letting every repository fail identically and opaquely.
+    if b"\r\n" in VERIFY.read_bytes().split(b"\n", 1)[0] + b"\n":
+        print("error: scripts have Windows (CRLF) line endings, so the shebang "
+              "reads as 'bash\\r' and will not run.\n"
+              "Fix the checkout with:\n"
+              "    git config core.autocrlf false\n"
+              "    git rm --cached -r . >/dev/null && git reset --hard\n"
+              "The committed .gitattributes prevents this on a fresh clone.",
+              file=sys.stderr)
+        return 1
+
     try:
         import yaml
     except ImportError:
@@ -90,8 +103,14 @@ def main():
         base, suite, component = parsed
         print(f"--- {name} ({suite}/{component})")
         rc = subprocess.run(
-            [str(VERIFY), "repo", entry.get("key_url", ""), base, suite, component]
+            ["bash", str(VERIFY), "repo", entry.get("key_url", ""), base, suite, component]
         ).returncode
+        if rc not in (0, 1, 2):
+            # 126/127 mean the helper could not be executed. Anything unexpected
+            # is a failure of the check itself, which must not be reported as a
+            # clean result.
+            print(f"  ! verify-change.sh exited {rc} -- the check did not run")
+            rc = 1
         # 1 (definitively wrong) outranks 2 (could not check): a real error must
         # not be masked by an unrelated network block.
         worst = 1 if 1 in (worst, rc) else max(worst, rc)
@@ -100,7 +119,7 @@ def main():
     verdict = {0: "all repositories verified",
                1: "at least one repository is WRONG -- fix before building",
                2: "some repositories could not be checked (network blocked) -- "
-                  "none were found wrong"}[worst]
+                  "none were found wrong"}.get(worst, f"unexpected status {worst}")
     print(verdict)
     return worst
 

@@ -1,0 +1,18 @@
+# Everything in this repo is consumed by Linux: shell scripts run under bash,
+# Ansible reads YAML inside a build VM, and Packer HCL is parsed on a Linux
+# builder. A CRLF checkout breaks all of it in confusing ways -- a script's
+# shebang becomes "bash\r", which fails with "No such file or directory" while
+# the file is plainly there.
+#
+# Forcing LF in the working tree means a clone on Windows, or into a Windows
+# filesystem under WSL, produces files that actually run.
+* text=auto eol=lf
+
+# Belt and braces for the files where a stray \r is fatal rather than cosmetic.
+*.sh    text eol=lf
+*.py    text eol=lf
+*.yml   text eol=lf
+*.yaml  text eol=lf
+*.hcl   text eol=lf
+*.j2    text eol=lf
+Makefile text eol=lf
