@@ -4,11 +4,14 @@
 # file.
 
 # --- Third-party APT repositories ---------------------------------------------
-- name: Ensure keyring directory exists
+- name: Ensure keyring directories exist
   ansible.builtin.file:
-    path: /etc/apt/keyrings
+    path: "{{ item }}"
     state: directory
     mode: "0755"
+  loop:
+    - /etc/apt/keyrings
+    - /usr/share/keyrings
 
 # `enabled` is usually a template referencing a feature switch, which renders
 # to a string. selectattr() would truth-test that string, and a non-empty
@@ -34,23 +37,30 @@
   loop_control:
     label: "{{ item.name }}"
 
-# Most vendors ship an armoured key that we dearmour to a .gpg. A few document
-# an exact keyring path and format of their own, and their package's postinst
-# may register its own sources.list.d entry pointing at that path -- overwriting
-# ours. If the file it names does not exist, every later apt update fails with
-# NO_PUBKEY. So an entry may set key_path (and key_armoured) to match the
-# vendor's documented layout exactly; the default keeps the dearmoured
-# behaviour every existing entry relies on.
-- name: Install repository signing keys (dearmoured, default)
+# Key handling is two independent choices, because vendors differ on both:
+#   key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
+#   key_armoured whether to copy the .asc verbatim or dearmour it first
+#
+# It matters because several vendors' packages register their own
+# sources.list.d entry naming a keyring path of their choosing -- if that file
+# does not exist, every later apt update fails with NO_PUBKEY. Matching the
+# vendor's documented layout keeps apt working whichever entry wins.
+#   docker/hashicorp: defaults (dearmoured, our path)
+#   claude-desktop:   armoured, vendor path
+#   1password:        dearmoured, vendor path
+- name: Install repository signing keys (dearmoured)
   ansible.builtin.command:
-    cmd: "gpg --batch --yes --dearmor -o /etc/apt/keyrings/{{ item.name }}.gpg /tmp/{{ item.name }}.asc"
-    creates: "/etc/apt/keyrings/{{ item.name }}.gpg"
+    cmd: >-
+      gpg --batch --yes --dearmor
+      -o {{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}
+      /tmp/{{ item.name }}.asc
+    creates: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
   when: not (item.key_armoured | default(false) | bool)
 
-- name: Install repository signing keys (armoured, at the vendor's own path)
+- name: Install repository signing keys (armoured, verbatim)
   ansible.builtin.copy:
     src: "/tmp/{{ item.name }}.asc"
     dest: "{{ item.key_path }}"
@@ -81,6 +91,48 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+
+# 1Password's debsig-verify policy. This verifies the .deb's own signature, in
+# addition to apt verifying the repository -- so it has to be in place before
+# the package installs, not after.
+#
+# If apps_1password_debsig_key_id is wrong, these files land in a directory
+# dpkg never consults and the policy is silently inert. apt install still
+# succeeds, which is why goss asserts the paths rather than trusting them.
+- name: Create 1Password debsig directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "/etc/debsig/policies/{{ apps_1password_debsig_key_id }}"
+    - "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}"
+  when: workstation_1password_enabled | bool
+
+# Recorded so the image test asserts against the id actually used, rather than
+# duplicating the constant into the test suite where the two could drift.
+- name: Record the debsig key id used
+  ansible.builtin.copy:
+    content: "{{ apps_1password_debsig_key_id }}\n"
+    dest: /etc/workstation-debsig-id
+    mode: "0644"
+  when: workstation_1password_enabled | bool
+
+- name: Install 1Password debsig policy
+  ansible.builtin.get_url:
+    url: https://downloads.1password.com/linux/debian/debsig/1password.pol
+    dest: "/etc/debsig/policies/{{ apps_1password_debsig_key_id }}/1password.pol"
+    mode: "0644"
+  when: workstation_1password_enabled | bool
+
+- name: Install 1Password debsig keyring
+  ansible.builtin.command:
+    cmd: >-
+      gpg --batch --yes --dearmor
+      -o /usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg
+      /tmp/1password.asc
+    creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
+  when: workstation_1password_enabled | bool
 
 # Chrome re-adds its own apt source and keyring -- from postinst and from a
 # daily cron job -- writing the same sources.list.d filename this role manages.

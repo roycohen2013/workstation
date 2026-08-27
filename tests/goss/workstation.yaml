@@ -26,6 +26,7 @@ package:
   tlp:               { installed: true }
   claude-desktop:    { installed: true }
   google-chrome-stable: { installed: true }
+  1password:         { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }
   ovmf:              { installed: true }
@@ -147,6 +148,24 @@ command:
     exec: "grep -q 'repo_add_once=\"false\"' /etc/default/google-chrome && echo guarded"
     exit-status: 0
     stdout: ["guarded"]
+
+  # 1Password's keyring must be at the vendor's documented path, not ours.
+  1password-keyring-at-vendor-path:
+    exec: "test -s /usr/share/keyrings/1password-archive-keyring.gpg && echo present"
+    exit-status: 0
+    stdout: ["present"]
+
+  # The debsig policy is silently inert if it lands in the wrong key-ID
+  # directory, and apt install succeeds either way -- so assert both files
+  # exist under the configured ID rather than assuming the ID is right.
+  1password-debsig-policy-installed:
+    exec: |
+      id=$(cat /etc/workstation-debsig-id)
+      test -s "/etc/debsig/policies/${id}/1password.pol" \
+        && test -s "/usr/share/debsig/keyrings/${id}/debsig.gpg" \
+        && echo installed
+    exit-status: 0
+    stdout: ["installed"]
 
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:
