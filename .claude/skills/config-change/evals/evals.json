@@ -1,0 +1,66 @@
+{
+  "skill_name": "config-change",
+  "evals": [
+    {
+      "id": 0,
+      "name": "add-apt-packages",
+      "prompt": "can you throw duf and hyperfine onto the image? i keep apt installing them by hand every time i set up a fresh machine",
+      "expected_output": "Both packages added to an appropriate apt list in ansible/group_vars/all.yml (base or dev, either is defensible), verified to exist in the Ubuntu archive, lint passes, committed and pushed.",
+      "files": [],
+      "assertions": [
+        "Both 'duf' and 'hyperfine' present in an apt package list (apps_apt_base or apps_apt_dev)",
+        "Packages were routed to a general apt list, not into apps_apt_repos or apps_snap",
+        "Package existence was actually verified against the Ubuntu archive before committing",
+        "make lint passes on the resulting tree",
+        "The change was committed AND pushed to the remote",
+        "No unrelated files were modified"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "add-vendor-repo",
+      "prompt": "i need tailscale on the laptop. not the ubuntu archive one though, that thing is always months behind - i want it straight from tailscale's own repo",
+      "expected_output": "New entry in apps_apt_repos with name, key_url, folded repo line using ansible_distribution_release, signed-by path matching the entry name, and tailscale in packages. Repo key/suite/component verified. Lint passes, committed.",
+      "files": [],
+      "assertions": [
+        "A new entry was added to apps_apt_repos (not a bare package in apps_apt_base)",
+        "The signed-by keyring path matches the entry's own name field (tailscale.gpg)",
+        "The repo line uses {{ ansible_distribution_release }} rather than a hardcoded codename",
+        "'tailscale' is listed in that repo entry's own packages list",
+        "The entry has an 'enabled' key set to a real boolean or bool-rendering template",
+        "The repo key URL and suite were verified against the live Tailscale repo before committing",
+        "All added YAML lines stay within the 120-character yamllint limit (folded scalar used)",
+        "make lint passes on the resulting tree"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "dconf-dock-setting",
+      "prompt": "make the dock auto-hide and stick it on the bottom of the screen instead of the left hand side",
+      "expected_output": "Two entries appended to desktop_dconf with correct GVariant literals - dock-fixed false (bare true/false) and dock-position as a quoted string like \"'BOTTOM'\". Lint passes, committed.",
+      "files": [],
+      "assertions": [
+        "New entries were appended to desktop_dconf in ansible/group_vars/all.yml",
+        "The dock position value is a quoted GVariant string literal (e.g. \"'BOTTOM'\"), not a bare word",
+        "Boolean dconf values are bare true/false without inner quotes",
+        "The dconf keys used belong to a real schema (dash-to-dock or dash-to-panel)",
+        "make lint passes on the resulting tree",
+        "The change was committed"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "ufw-source-restriction",
+      "prompt": "i want to be able to ssh into this box but only from my home network, 192.168.1.0/24. nothing else should be able to reach it",
+      "expected_output": "Recognises that security_ufw_allow's current shape (port/proto/comment) has no source field, so this cannot be done by data alone. Flags that the security role needs a 'from' field added, rather than silently writing a rule that allows SSH from everywhere.",
+      "files": [],
+      "assertions": [
+        "Recognises that security_ufw_allow's current shape has no source/from field",
+        "Does NOT silently add a rule that opens SSH to the entire internet",
+        "Notes that workstation_ssh_server_enabled defaults to false and must be flipped for SSH to work at all",
+        "Either extends the security role to support a source, or clearly flags the limitation instead of faking it",
+        "make lint passes on the resulting tree (if any change was made)"
+      ]
+    }
+  ]
+}

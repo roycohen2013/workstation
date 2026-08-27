@@ -84,4 +84,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shellcheck
-        run: shellcheck scripts/*.sh tests/goss/*.sh .claude/skills/*/scripts/*.sh
+        run: shellcheck $(find scripts tests .claude -name '*.sh' 2>/dev/null | sort)

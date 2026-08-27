@@ -159,7 +159,12 @@ lint-terraform:
 
 .PHONY: lint-shell
 lint-shell:
-	shellcheck scripts/*.sh tests/goss/*.sh .claude/skills/*/scripts/*.sh
+	@# Collected with find rather than globs: an unmatched glob is passed
+	# through literally and shellcheck then fails on a path that does not
+	# exist, which reads like a broken lint rather than a missing directory.
+	sh_files=$$(find scripts tests .claude -name '*.sh' 2>/dev/null | sort)
+	if [ -z "$$sh_files" ]; then echo "lint-shell: no shell scripts found"; exit 0; fi
+	shellcheck $$sh_files
 
 .PHONY: fmt
 fmt: ## Reformat Packer and Terraform files in place
