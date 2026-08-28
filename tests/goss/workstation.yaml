@@ -31,6 +31,7 @@ package:
   libreoffice-calc:    { installed: true }
   libreoffice-impress: { installed: true }
   libreoffice-draw:    { installed: true }
+  krdc:              { installed: true }
   1password:         { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }

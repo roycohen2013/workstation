@@ -152,6 +152,12 @@ apps_apt_desktop:
   - libreoffice-impress
   - libreoffice-draw
   - flameshot
+  # KDE's remote desktop client (RDP and VNC). krdc is 4MB, but it is the only
+  # KDE application here and pulls Qt6 (~28MB) and KDE Frameworks 6 (~25MB)
+  # onto an otherwise GNOME desktop -- about 62MB before transitive deps.
+  # Recorded here so those libraries are attributable later: without this note,
+  # a Qt6 stack on a GNOME image looks like something nobody asked for.
+  - krdc
   - xclip
   - wl-clipboard
   - wireshark
