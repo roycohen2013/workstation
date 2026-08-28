@@ -27,6 +27,10 @@ package:
   claude-desktop:    { installed: true }
   google-chrome-stable: { installed: true }
   code:              { installed: true }
+  libreoffice-writer:  { installed: true }
+  libreoffice-calc:    { installed: true }
+  libreoffice-impress: { installed: true }
+  libreoffice-draw:    { installed: true }
   1password:         { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }
@@ -174,6 +178,17 @@ command:
     exec: "snap list code >/dev/null 2>&1 && echo duplicate || echo single"
     exit-status: 0
     stdout: ["single"]
+
+  # Base and Math were deliberately excluded: they pull a Java runtime for the
+  # report builder, which is a couple of hundred megabytes for features that go
+  # unopened. Assert that, so a future edit to the metapackage is a visible
+  # decision rather than a silent size regression.
+  libreoffice-metapackage-not-installed:
+    exec: |
+      dpkg-query -W -f='${Status}' libreoffice-base 2>/dev/null \
+        | grep -q 'ok installed' && echo present || echo absent
+    exit-status: 0
+    stdout: ["absent"]
 
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:

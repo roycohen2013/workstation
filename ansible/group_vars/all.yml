@@ -142,6 +142,15 @@ apps_apt_desktop:
   - evince
   - vlc
   - gimp
+  # LibreOffice, without the metapackage. libreoffice-core (~151MB) is shared
+  # by all of these, so the four apps cost only ~83MB more. The metapackage
+  # would additionally pull Base, Math and report-builder-bin, and with them a
+  # Java runtime -- a couple of hundred megabytes on every machine flashed from
+  # this image, for features most people never open.
+  - libreoffice-writer
+  - libreoffice-calc
+  - libreoffice-impress
+  - libreoffice-draw
   - flameshot
   - xclip
   - wl-clipboard
