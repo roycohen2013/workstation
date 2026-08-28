@@ -26,6 +26,7 @@ package:
   tlp:               { installed: true }
   claude-desktop:    { installed: true }
   google-chrome-stable: { installed: true }
+  code:              { installed: true }
   1password:         { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }
@@ -166,6 +167,13 @@ command:
         && echo installed
     exit-status: 0
     stdout: ["installed"]
+
+  # VS Code must come from apt only. A leftover snap would put a second copy on
+  # the image with its own updater, and nothing else here would notice.
+  vscode-not-also-a-snap:
+    exec: "snap list code >/dev/null 2>&1 && echo duplicate || echo single"
+    exit-status: 0
+    stdout: ["single"]
 
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:

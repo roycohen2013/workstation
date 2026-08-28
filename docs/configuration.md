@@ -75,6 +75,10 @@ Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 
 `true`
 
+### `workstation_vscode_enabled`
+
+`true`
+
 ### `workstation_1password_enabled`
 
 `true`
@@ -163,9 +167,13 @@ dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
 
 ### `apps_snap`
 
-_(list or block — see the file)_
+`[]`
 
 **Snap**
+Empty by design. VS Code used to be installed here as a classic snap; it now
+comes from Microsoft's apt repository instead (see apps_apt_repos above), and
+keeping both would put two independent copies on the image, each with its own
+update mechanism and its own ~300MB.
 
 ### `apps_flatpak`
 

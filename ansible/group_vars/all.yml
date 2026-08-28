@@ -33,6 +33,7 @@ workstation_flatpak_enabled: true
 # Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 workstation_claude_desktop_enabled: true
 workstation_chrome_enabled: true
+workstation_vscode_enabled: true
 workstation_1password_enabled: true
 
 # 1Password additionally documents a debsig-verify policy, which checks the
@@ -215,6 +216,26 @@ apps_apt_repos:
     packages:
       - 1password
 
+  - name: vscode
+    enabled: "{{ workstation_vscode_enabled }}"
+    key_url: https://packages.microsoft.com/keys/microsoft.asc
+    # Microsoft's package registers its own sources.list.d entry. Rather than
+    # hunting for the flag that disables that, this entry deliberately matches
+    # the layout Microsoft documents -- the keyring at /usr/share/keyrings/
+    # microsoft.gpg, and (via name: vscode) the file at vscode.list -- so
+    # whichever entry ends up on disk points at a keyring that exists. The
+    # NO_PUBKEY failure this avoids only shows up on a later apt update.
+    key_path: /usr/share/keyrings/microsoft.gpg
+    # Suite and component read from the repo's own Release file, not from docs:
+    #   Suite: stable  Components: main  Architectures: amd64 arm64 armhf all
+    # Signing key EB3E94ADBE1229CF, "Microsoft (Release signing)".
+    repo: >-
+      deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft.gpg]
+      https://packages.microsoft.com/repos/code
+      stable main
+    packages:
+      - code
+
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg
@@ -227,8 +248,11 @@ apps_apt_repos:
       - terraform
 
 # --- Snap --------------------------------------------------------------------
-apps_snap:
-  - { name: code, classic: true }
+# Empty by design. VS Code used to be installed here as a classic snap; it now
+# comes from Microsoft's apt repository instead (see apps_apt_repos above), and
+# keeping both would put two independent copies on the image, each with its own
+# update mechanism and its own ~300MB.
+apps_snap: []
 
 # --- Flatpak (flathub) -------------------------------------------------------
 apps_flatpak:
