@@ -86,6 +86,32 @@ already accessible.
 This lives here, not in workstation_user_groups, because roles/base creates
 the user long before these packages exist: the kvm group is created by the
 qemu recommends pulled in just above, so joining it any earlier fails. |
+| Download BalenaEtcher | ansible.builtin.get_url | True | --- BalenaEtcher ---------------------------------------------------------
+No apt repository exists in current vendor docs -- only a versioned .deb
+from GitHub releases, installed the way the vendor itself documents:
+`apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
+is exactly that -- apt, not raw dpkg, so dependencies resolve against the
+configured archive automatically. |
+| Install BalenaEtcher | ansible.builtin.apt | True |  |
+| Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
+that have nothing to do with security here -- a setuid helper with the
+wrong permissions, a restrictive kernel, running inside a VM -- and when it
+does, the app refuses to launch at all rather than degrading. --no-sandbox
+is upstream's own documented workaround. It is forced unconditionally,
+rather than left to whoever launches it to remember, because the failure
+mode without it is Etcher not starting at the exact moment you are trying
+to flash a drive.
+
+The binary to wrap is discovered from the package's own .desktop file
+rather than a hardcoded path: electron-builder's install layout has varied
+across releases, and a guessed path that turns out wrong would silently
+skip the wrapper instead of failing loudly. |
+| Read its Exec line | ansible.builtin.shell | True |  |
+| Resolve the real binary the launcher points at | ansible.builtin.shell | True |  |
+| Fail loudly if the real binary could not be resolved | ansible.builtin.assert | True |  |
+| Move the real binary aside | ansible.builtin.command | True |  |
+| Install the --no-sandbox wrapper in its place | ansible.builtin.copy | True |  |
+| Remove the downloaded BalenaEtcher package | ansible.builtin.file | True |  |
 | Install snaps | community.general.snap | True | --- Snaps -------------------------------------------------------------------- |
 | Install flatpaks | community.general.flatpak | True | --- Flatpaks ----------------------------------------------------------------- |
 

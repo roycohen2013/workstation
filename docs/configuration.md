@@ -79,6 +79,37 @@ Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 
 `true`
 
+### `workstation_balena_etcher_enabled`
+
+`true`
+
+BalenaEtcher: no apt repository exists in current vendor documentation --
+checked 2026-08 against github.com/balena-io/etcher's README, which only
+describes downloading a versioned .deb and running
+`apt install ./balena-etcher_*_amd64.deb`. Installed that way, pinned, rather
+than via apps_apt_repos, and bumped deliberately when a new version is
+wanted -- the same trust model group_vars already uses for dev_mise_runtimes.
+
+### `balena_etcher_version`
+
+`"2.1.6"`
+
+### `balena_etcher_release_base`
+
+`https://github.com/balena-io/etcher/releases/download`
+
+### `balena_etcher_deb_url`
+
+_(list or block — see the file)_
+
+### `balena_etcher_deb_sha256`
+
+`2bdebb46c9f750a9abf11c188ff69a405b4a4fed114333d634c3b3fe59a64057`
+
+From the release's combined SHA256SUMS.Linux.x64.txt. A mismatch fails the
+download task outright, so an interrupted or tampered fetch stops the build
+instead of installing something unverified.
+
 ### `workstation_1password_enabled`
 
 `true`

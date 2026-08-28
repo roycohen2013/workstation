@@ -27,6 +27,7 @@ package:
   claude-desktop:    { installed: true }
   google-chrome-stable: { installed: true }
   code:              { installed: true }
+  balena-etcher:     { installed: true }
   libreoffice-writer:  { installed: true }
   libreoffice-calc:    { installed: true }
   libreoffice-impress: { installed: true }
@@ -190,6 +191,22 @@ command:
         | grep -q 'ok installed' && echo present || echo absent
     exit-status: 0
     stdout: ["absent"]
+
+  # BalenaEtcher must never launch without --no-sandbox -- see roles/apps for
+  # why. Can't actually launch the GUI in a headless build, so this checks the
+  # wrapper structure directly: the real binary was moved aside, a wrapper
+  # sits where it used to be, and that wrapper actually names the flag.
+  balena-etcher-no-sandbox-wrapper:
+    exec: |
+      desktop=$(dpkg -L balena-etcher | grep -E '\.desktop$' | head -1)
+      exec_line=$(grep -m1 '^Exec=' "$desktop" | sed 's/^Exec=//')
+      cmd=$(echo "$exec_line" | awk '{print $1}')
+      case "$cmd" in /*) bin="$cmd" ;; *) bin=$(command -v "$cmd") ;; esac
+      real=$(readlink -f "$bin")
+      test -x "${real}.real" || { echo "no .real binary"; exit 1; }
+      grep -q -- '--no-sandbox' "$real" && echo wrapped || echo unwrapped
+    exit-status: 0
+    stdout: ["wrapped"]
 
   # Sanity check that GRUB will actually be regenerated correctly.
   grub-config-present:
