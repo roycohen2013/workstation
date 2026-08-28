@@ -208,8 +208,11 @@ def main():
              "| [roles.md](roles.md) | Index of the Ansible roles |\n",
              "| [packer.md](packer.md) | Packer build variables |\n",
              "| [terraform.md](terraform.md) | Terraform module inputs and outputs |\n",
+             "| [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |\n",
              "\nThe contents of a *built image* are documented separately, in the "
-             "`docs.html` rendered beside each artifact by `scripts/render-docs.py`.\n"]
+             "`docs.html` rendered beside each artifact by `scripts/render-docs.py`.\n",
+             "\n`aws-s3-setup.md` is hand-written, not generated -- everything else "
+             "in this table is produced from source by this script.\n"]
     written["README.md"] = "".join(index)
 
     for name, body in written.items():

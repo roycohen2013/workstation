@@ -10,5 +10,8 @@ Generated from source by `make docs-config`. CI regenerates these and fails if t
 | [roles.md](roles.md) | Index of the Ansible roles |
 | [packer.md](packer.md) | Packer build variables |
 | [terraform.md](terraform.md) | Terraform module inputs and outputs |
+| [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |
 
 The contents of a *built image* are documented separately, in the `docs.html` rendered beside each artifact by `scripts/render-docs.py`.
+
+`aws-s3-setup.md` is hand-written, not generated -- everything else in this table is produced from source by this script.

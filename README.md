@@ -303,7 +303,11 @@ make fetch       # on another machine
 
 R2 rather than S3 because egress is free — pulling a multi-GB image down a few
 times a month is the dominant cost otherwise. Any S3-compatible store works;
-the scripts use the plain `aws` CLI.
+the scripts use the plain `aws` CLI, only adding a custom endpoint when
+`AWS_ENDPOINT_URL` is set.
+
+Want a real AWS S3 bucket instead — no Cloudflare account, or an existing AWS
+setup? See [`docs/aws-s3-setup.md`](docs/aws-s3-setup.md).
 
 ## Repository layout
 
