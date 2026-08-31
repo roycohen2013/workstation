@@ -1,6 +1,16 @@
 ---
 collections:
+  # Upper-bounded, not just floored: this is not theoretical -- an unbounded
+  # ">=8.0.0" let a machine running community.general 12.x land on the very
+  # first real build, and 12.0.0 removed the community.general.yaml callback
+  # plugin ansible.cfg depended on, breaking Ansible before a single task ran.
+  # Raise the ceiling deliberately, after testing against it, the same way
+  # balena_etcher_version and dev_mise_runtimes are bumped on purpose rather
+  # than left to float. Only this collection is capped: it is the one with a
+  # confirmed incident behind it, not a guess applied for symmetry -- there is
+  # no known break in ansible.posix, and 2.1.0 (already newer than a
+  # precautionary "<2.0.0" would have allowed) works fine here.
   - name: community.general   # dconf, flatpak, snap, timezone
-    version: ">=8.0.0"
+    version: ">=8.0.0,<12.0.0"
   - name: ansible.posix       # mount, sysctl, authorized_key
     version: ">=1.5.0"
