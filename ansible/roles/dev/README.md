@@ -39,8 +39,12 @@ clashes; link them to the names everyone actually types. |
 mise keeps toolchains in the user's home rather than the system, so runtime
 versions can be bumped without a rebuild -- and so the image stays generic. |
 | Run mise installer | ansible.builtin.command | True |  |
+| Ensure mise config directory exists | ansible.builtin.file | True | Must run BEFORE the copy below: ansible.builtin.copy does not create missing
+parent directories, and mise's installer does not create ~/.config/mise
+until it is actually invoked -- which "Run mise installer" above does not
+do. Copying config.toml first fails with "Destination directory ... does
+not exist" on exactly the fresh install this role is meant for. |
 | Declare global runtime versions | ansible.builtin.copy | True |  |
-| Ensure mise config directory is owned correctly | ansible.builtin.file | True |  |
 | Install runtimes now (live phase only) | ansible.builtin.command | True | Toolchain downloads are large and version-sensitive. Installing them at
 first login instead of build time keeps the image smaller and means a stale
 image still lands on current runtimes. |

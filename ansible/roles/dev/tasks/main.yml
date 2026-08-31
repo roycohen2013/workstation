@@ -52,6 +52,20 @@
     MISE_QUIET: "1"
   when: dev_mise_enabled | bool
 
+# Must run BEFORE the copy below: ansible.builtin.copy does not create missing
+# parent directories, and mise's installer does not create ~/.config/mise
+# until it is actually invoked -- which "Run mise installer" above does not
+# do. Copying config.toml first fails with "Destination directory ... does
+# not exist" on exactly the fresh install this role is meant for.
+- name: Ensure mise config directory exists
+  ansible.builtin.file:
+    path: "/home/{{ workstation_user }}/.config/mise"
+    state: directory
+    owner: "{{ workstation_user }}"
+    group: "{{ workstation_user }}"
+    mode: "0755"
+  when: dev_mise_enabled | bool
+
 - name: Declare global runtime versions
   become: true
   become_user: "{{ workstation_user }}"
@@ -64,15 +78,6 @@
       {% endfor %}
     dest: "/home/{{ workstation_user }}/.config/mise/config.toml"
     mode: "0644"
-  when: dev_mise_enabled | bool
-
-- name: Ensure mise config directory is owned correctly
-  ansible.builtin.file:
-    path: "/home/{{ workstation_user }}/.config/mise"
-    state: directory
-    owner: "{{ workstation_user }}"
-    group: "{{ workstation_user }}"
-    mode: "0755"
   when: dev_mise_enabled | bool
 
 # Toolchain downloads are large and version-sensitive. Installing them at
