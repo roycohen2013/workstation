@@ -86,16 +86,30 @@ rm -f "${EXTRACT}/md5sum.txt"
 # releases and are easy to get subtly wrong, producing an ISO that boots in a
 # VM but not off USB), ask xorriso to report the exact arguments the source ISO
 # was built with and reuse them verbatim.
+#
+# The report is shell-quoted text meant to be reparsed by a shell (values with
+# special characters come back as e.g. --modification-date='2026083121063400'),
+# not plain whitespace-separated words. Capturing it into an unquoted variable
+# and expanding that unquoted -- which is what this used to do -- does word
+# splitting but does NOT strip those embedded quote characters, since they are
+# not shell syntax at that point, just data. xorriso then receives arguments
+# like the literal seven characters '2026083121063400' -- quote marks
+# included -- and rejects them: "Not an ECMA-119 time string." xargs performs
+# the same quote-stripping tokenization a shell would, without eval's risk of
+# also executing anything embedded in the text (low, given this is xorriso's
+# own report of a checksum-verified official ISO -- but avoidable at no cost).
 echo "==> Reading source ISO boot layout"
-MKISOFS_ARGS=$(xorriso -indev "${CACHE}/${ISO_NAME}" -report_el_torito as_mkisofs 2>/dev/null \
-               | grep -v '^-V' | tr '\n' ' ')
-[ -n "$MKISOFS_ARGS" ] || { echo "error: could not read boot layout from source ISO" >&2; exit 1; }
+mapfile -d '' -t MKISOFS_ARGS < <(
+    xorriso -indev "${CACHE}/${ISO_NAME}" -report_el_torito as_mkisofs 2>/dev/null \
+        | grep -v '^-V' \
+        | xargs -n1 printf '%s\0'
+)
+[ "${#MKISOFS_ARGS[@]}" -gt 0 ] || { echo "error: could not read boot layout from source ISO" >&2; exit 1; }
 
 echo "==> Building ${OUT_ISO}"
-# shellcheck disable=SC2086
 ( cd "$EXTRACT" && xorriso -as mkisofs -r \
     -V "WORKSTATION_${VERSION}" \
-    ${MKISOFS_ARGS} \
+    "${MKISOFS_ARGS[@]}" \
     -o "$(cd "$OLDPWD" && pwd)/${OUT_ISO}" . ) >/dev/null
 
 sha256sum "$OUT_ISO" | tee "${OUT_ISO}.sha256"
