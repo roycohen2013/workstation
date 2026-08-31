@@ -80,10 +80,19 @@ init: ## Install Packer plugins
 
 .PHONY: image
 image: check-tools init deps ## Build the golden image (qcow2 + raw)
+	# -force: the qemu builder refuses to run if its output directory already
+	# exists, and a build that dies partway (crash, Ctrl-C, a machine reboot
+	# mid-compression) always leaves one behind. Without this, every retry
+	# after any interruption fails immediately with "must not exist" instead
+	# of actually retrying -- confirmed by reproducing that exact error and
+	# confirming -force is what clears it, packer's own documented mechanism
+	# for this, rather than this Makefile reimplementing the cleanup itself.
 	packer build \
+	  -force \
 	  -var "version=$(VERSION)" \
 	  -var "image_name=$(IMAGE_NAME)" \
 	  -var "output_dir=$(BUILD_DIR)" \
+	  $(ARGS) \
 	  packer/
 	@echo
 	@echo "Built $(ARTIFACT).{qcow2,raw}.zst"

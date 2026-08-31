@@ -9,6 +9,7 @@ Inputs to `packer/`, with the defaults they take when not overridden. Override o
 | `ansible_extra_vars` | "{}" |
 | `build_password` | "packer" |
 | `build_username` | "packer" |
+| `compression_level` | "12" |
 | `cpus` | "4" |
 | `disk_size` | "24G" |
 | `headless` | "true" |

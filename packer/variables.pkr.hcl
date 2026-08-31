@@ -49,6 +49,21 @@ variable "disk_size" {
   description = "Virtual disk size. firstboot grows the root partition to fill the real disk, so this only needs to hold the installed system."
 }
 
+variable "compression_level" {
+  type        = number
+  default     = 12
+  description = <<-EOT
+    zstd level for the exported artifacts. Measured on real binary content
+    (not zeros or random data, which distort any level equally): level 19,
+    the previous default, took 9.4x as long as level 12 for a 2.9-percentage-
+    point smaller file -- on a real ~16GB image, roughly an hour versus a few
+    minutes. zstd's higher levels do not scale with thread count the way
+    lower ones do, so more CPU cores does not fix this; the level itself is
+    the lever. Override with -var compression_level=19 for a one-off
+    publish build where the smaller download is worth the wait.
+  EOT
+}
+
 variable "cpus" {
   type    = number
   default = 4

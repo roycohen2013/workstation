@@ -79,6 +79,19 @@ Output lands in `build/workstation-<version>/`:
 | `*.raw.zst` | `dd` straight onto a laptop's NVMe/SSD |
 | `SHA256SUMS` | verify before writing to any disk |
 
+Compression defaults to zstd level 12, not the more extreme levels the `zstd`
+CLI supports. Measured on real binary content: level 19 took 9.4x as long as
+level 12 for a 2.9-percentage-point smaller file — on a real ~16GB image,
+roughly an hour versus a few minutes, and it does not get meaningfully faster
+with more CPU cores (higher zstd levels do not scale with thread count the
+way lower ones do). Override for a one-off publish where the smaller download is worth the wait:
+`make image ARGS='-var compression_level=19'` — or edit
+`compression_level`'s default in `packer/variables.pkr.hcl`.
+
+If a build is interrupted — a crash, Ctrl-C, a reboot mid-compression — the
+next `make image` retries cleanly rather than failing with "Output directory
+... already exists." Nothing from the failed attempt needs manual cleanup.
+
 ## Everyday commands
 
 ```
