@@ -49,13 +49,22 @@ echo "==> Verifying source ISO"
 curl -fsSL "$SUMS_URL" -o "${CACHE}/SHA256SUMS"
 (cd "$CACHE" && grep " \*\?${ISO_NAME}\$" SHA256SUMS | sha256sum -c -)
 
+# Absolute, not relative. xorriso's own boot-layout report (read further down)
+# can embed a raw path back to this exact file -- real Ubuntu ISOs have a
+# hybrid MBR/GPT boot area that xorriso cannot regenerate from higher-level
+# flags, only copy byte-for-byte from the original, so its report says
+# exactly that: read these bytes from build/cache/<iso>. That report is
+# reused later from inside $EXTRACT, a different directory entirely, and a
+# relative path there resolves against the wrong base and points at nothing.
+ISO_PATH="$(cd "$CACHE" && pwd)/${ISO_NAME}"
+
 # --- Extract ------------------------------------------------------------------
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 EXTRACT="${WORK}/iso"
 
 echo "==> Extracting"
-xorriso -osirrox on -indev "${CACHE}/${ISO_NAME}" -extract / "$EXTRACT" >/dev/null 2>&1
+xorriso -osirrox on -indev "$ISO_PATH" -extract / "$EXTRACT" >/dev/null 2>&1
 chmod -R u+w "$EXTRACT"
 
 # --- Inject the autoinstall seed ---------------------------------------------
@@ -100,7 +109,7 @@ rm -f "${EXTRACT}/md5sum.txt"
 # own report of a checksum-verified official ISO -- but avoidable at no cost).
 echo "==> Reading source ISO boot layout"
 mapfile -d '' -t MKISOFS_ARGS < <(
-    xorriso -indev "${CACHE}/${ISO_NAME}" -report_el_torito as_mkisofs 2>/dev/null \
+    xorriso -indev "$ISO_PATH" -report_el_torito as_mkisofs 2>/dev/null \
         | grep -v '^-V' \
         | xargs -n1 printf '%s\0'
 )
