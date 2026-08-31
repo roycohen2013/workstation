@@ -50,7 +50,25 @@ check-tools:
 	fi
 	if [ ! -e /dev/kvm ]; then
 	  echo "/dev/kvm is missing -- the build needs hardware virtualisation."
-	  echo "Enable VT-x/AMD-V in firmware, and check you are in the 'kvm' group."
+	  echo "Enable VT-x/AMD-V in firmware. On WSL2, also enable nested"
+	  echo "virtualisation (nestedVirtualization=true in .wslconfig on Windows)."
+	  exit 1
+	fi
+	if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+	  echo "/dev/kvm exists but this user cannot access it (device group: $$(stat -c %G /dev/kvm 2>/dev/null))."
+	  echo "This is the single most common first-build failure: qemu starts,"
+	  echo "gets 'Permission denied' opening /dev/kvm, and Packer only reports"
+	  echo "the generic 'Qemu failed to start' -- after downloading the ISO and"
+	  echo "waiting through the boot timeout first."
+	  echo
+	  echo "Fix:"
+	  echo "    sudo usermod -aG kvm $$USER"
+	  echo "    # then log out and back in (or reboot) -- a new group only takes"
+	  echo "    # effect in a new login session, not the current shell"
+	  echo
+	  echo "Confirm before re-running make image:"
+	  echo "    groups                 # should list kvm"
+	  echo "    qemu-system-x86_64 -enable-kvm -m 256 -nographic -serial none"
 	  exit 1
 	fi
 
