@@ -54,9 +54,10 @@ It matters because several vendors' packages register their own
 sources.list.d entry naming a keyring path of their choosing -- if that file
 does not exist, every later apt update fails with NO_PUBKEY. Matching the
 vendor's documented layout keeps apt working whichever entry wins.
-docker/hashicorp: defaults (dearmoured, our path)
+docker:           defaults (dearmoured, our path)
 claude-desktop:   armoured, vendor path
-1password:        dearmoured, vendor path |
+1password:        dearmoured, vendor path
+hashicorp:        dearmoured, vendor path -- see the note in group_vars |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
 | Add repositories | ansible.builtin.apt_repository | False |  |

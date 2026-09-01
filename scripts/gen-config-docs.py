@@ -166,8 +166,24 @@ def md_terraform():
             continue
         parts.append(f"\n## `terraform/{mod.name}`\n\n")
         if have:
-            parts.append(run(["terraform-docs", "markdown", "table", "--no-header", str(mod)])
-                         or "_terraform-docs produced no output._\n")
+            # --hide header, not --no-header: the latter was removed and
+            # terraform-docs exits non-zero on the unknown flag, which run()
+            # turns into "" and the line below turned into a placeholder. The
+            # committed docs said "terraform-docs not installed" for so long
+            # that nobody noticed the installed path was broken too.
+            #
+            # --indent 3 so its sections nest under the "## terraform/<name>"
+            # heading written above rather than sitting level with it.
+            out = run(["terraform-docs", "markdown", "table",
+                       "--hide", "header", "--indent", "3", str(mod)])
+            if not out.strip():
+                # Loud, because the quiet version of this cost a whole
+                # feature: docs that silently degrade still regenerate
+                # identically every time, so `make lint-docs` stays green
+                # while documenting nothing.
+                sys.exit(f"terraform-docs is installed but produced no output for {mod}. "
+                         f"Its flags likely changed again; run it by hand to see the error.")
+            parts.append(out)
         else:
             # Falling back rather than emitting nothing: a missing optional tool
             # should degrade the docs, not blank a whole section silently.

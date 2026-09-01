@@ -36,6 +36,34 @@
     cmd: pipx install --global docsible
     creates: /usr/local/bin/docsible
 
+# terraform-docs is neither in the Ubuntu archive nor on PyPI, so it is
+# fetched as a pinned release tarball. checksum: makes a tampered or truncated
+# download fail the task outright rather than unpacking something unverified.
+- name: Download terraform-docs
+  ansible.builtin.get_url:
+    url: "{{ dev_terraform_docs_url }}"
+    dest: "/tmp/terraform-docs-{{ dev_terraform_docs_version }}.tar.gz"
+    checksum: "sha256:{{ dev_terraform_docs_sha256 }}"
+    mode: "0644"
+
+# The tarball holds the bare binary at its root, so extra=... would scatter
+# LICENSE and README into /usr/local/bin alongside it.
+- name: Install terraform-docs
+  ansible.builtin.unarchive:
+    src: "/tmp/terraform-docs-{{ dev_terraform_docs_version }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    include:
+      - terraform-docs
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Remove the downloaded terraform-docs archive
+  ansible.builtin.file:
+    path: "/tmp/terraform-docs-{{ dev_terraform_docs_version }}.tar.gz"
+    state: absent
+
 # --- Docker -------------------------------------------------------------------
 - name: Add user to the docker group
   ansible.builtin.user:

@@ -4,40 +4,89 @@
 
 ## `terraform/artifacts`
 
-_terraform-docs not installed; showing declared variables._
+### Requirements
 
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0 |
+| <a name="requirement_cloudflare"></a> [cloudflare](#requirement\_cloudflare) | ~> 5.0 |
 
-**variables.tf**
+### Providers
 
-- `cloudflare_api_token`
-- `cloudflare_account_id`
-- `bucket_name`
-- `bucket_location`
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | ~> 5.0 |
 
-**outputs.tf**
+### Modules
 
-- `bucket_name`
-- `s3_endpoint`
-- `usage`
+No modules.
+
+### Resources
+
+| Name | Type |
+| ---- | ---- |
+| [cloudflare_r2_bucket.artifacts](https://registry.terraform.io/providers/cloudflare/cloudflare/latest/docs/resources/r2_bucket) | resource |
+
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_bucket_location"></a> [bucket\_location](#input\_bucket\_location) | R2 location hint: ENAM, WNAM, EEUR, WEUR, APAC or OC. | `string` | `"ENAM"` | no |
+| <a name="input_bucket_name"></a> [bucket\_name](#input\_bucket\_name) | Bucket holding published images. Must be globally unique within the account. | `string` | `"workstation-artifacts"` | no |
+| <a name="input_cloudflare_account_id"></a> [cloudflare\_account\_id](#input\_cloudflare\_account\_id) | Cloudflare account ID that owns the bucket. | `string` | n/a | yes |
+| <a name="input_cloudflare_api_token"></a> [cloudflare\_api\_token](#input\_cloudflare\_api\_token) | R2-scoped API token. Prefer the CLOUDFLARE\_API\_TOKEN environment variable over passing this on the command line. | `string` | `null` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_bucket_name"></a> [bucket\_name](#output\_bucket\_name) | Set as WORKSTATION\_BUCKET for the publish and fetch scripts. |
+| <a name="output_s3_endpoint"></a> [s3\_endpoint](#output\_s3\_endpoint) | Set as AWS\_ENDPOINT\_URL so the aws CLI talks to R2. |
+| <a name="output_usage"></a> [usage](#output\_usage) | Environment the publish/fetch scripts expect. |
 
 ## `terraform/testlab`
 
-_terraform-docs not installed; showing declared variables._
+### Requirements
 
+| Name | Version |
+| ---- | ------- |
+| <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0 |
+| <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | ~> 0.8 |
 
-**variables.tf**
+### Providers
 
-- `image_path`
-- `version`
-- `libvirt_uri`
-- `storage_pool`
-- `network_name`
-- `memory`
-- `vcpus`
-- `ovmf_code`
-- `ovmf_vars`
+| Name | Version |
+| ---- | ------- |
+| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | ~> 0.8 |
 
-**outputs.tf**
+### Modules
 
-- `ip_address`
-- `console_command`
+No modules.
+
+### Resources
+
+| Name | Type |
+| ---- | ---- |
+| [libvirt_domain.workstation](https://registry.terraform.io/providers/dmacvicar/libvirt/latest/docs/resources/domain) | resource |
+| [libvirt_volume.root](https://registry.terraform.io/providers/dmacvicar/libvirt/latest/docs/resources/volume) | resource |
+
+### Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| <a name="input_image_path"></a> [image\_path](#input\_image\_path) | Absolute path to the qcow2 produced by `make image`. | `string` | n/a | yes |
+| <a name="input_libvirt_uri"></a> [libvirt\_uri](#input\_libvirt\_uri) | n/a | `string` | `"qemu:///system"` | no |
+| <a name="input_memory"></a> [memory](#input\_memory) | n/a | `number` | `4096` | no |
+| <a name="input_network_name"></a> [network\_name](#input\_network\_name) | libvirt network. Must hand out DHCP leases, since the test waits for one. | `string` | `"default"` | no |
+| <a name="input_ovmf_code"></a> [ovmf\_code](#input\_ovmf\_code) | n/a | `string` | `"/usr/share/OVMF/OVMF_CODE_4M.fd"` | no |
+| <a name="input_ovmf_vars"></a> [ovmf\_vars](#input\_ovmf\_vars) | n/a | `string` | `"/usr/share/OVMF/OVMF_VARS_4M.fd"` | no |
+| <a name="input_storage_pool"></a> [storage\_pool](#input\_storage\_pool) | n/a | `string` | `"default"` | no |
+| <a name="input_vcpus"></a> [vcpus](#input\_vcpus) | n/a | `number` | `2` | no |
+| <a name="input_version"></a> [version](#input\_version) | Build version, used to name the test volume. | `string` | `"dev"` | no |
+
+### Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| <a name="output_console_command"></a> [console\_command](#output\_console\_command) | Watch the boot, including firstboot output. |
+| <a name="output_ip_address"></a> [ip\_address](#output\_ip\_address) | Address the test VM picked up. A lease at all is the primary signal that the image booted and brought up networking. |

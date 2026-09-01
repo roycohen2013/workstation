@@ -224,6 +224,30 @@ versions in one place. Set to {} to skip.
 
 _(list or block — see the file)_
 
+### `dev_terraform_docs_version`
+
+`"0.24.0"`
+
+terraform-docs generates the tables in docs/terraform.md. Not packaged for
+Ubuntu and not on PyPI, so it is a pinned release binary with a checksum --
+the same trust model balena_etcher uses, for the same reason: nothing else
+verifies what a release URL hands back.
+The pin is load-bearing beyond supply chain. `make lint-docs` regenerates
+the committed docs and fails if anything moved, so a version that formats
+its tables even slightly differently turns into a red build on a machine
+that happened to install a newer one. Bump it deliberately, then run
+`make docs-config` and commit the regenerated output in the same change.
+
+### `dev_terraform_docs_url`
+
+_(list or block — see the file)_
+
+### `dev_terraform_docs_sha256`
+
+`9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3`
+
+From the release's own terraform-docs-v<version>.sha256sum.
+
 ## Dotfiles
  Managed with chezmoi. The image ships the chezmoi binary only -- the repo
  is pulled on first login, so nothing personal is baked into a flashable

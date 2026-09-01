@@ -88,8 +88,26 @@ jobs:
         with:
           python-version: "3.12"
 
+      # terraform-docs formats its tables slightly differently between
+      # releases, and lint-docs fails the moment regenerated output stops
+      # matching what is committed -- so CI and the image must run the SAME
+      # version. Both the version and the checksum are read out of
+      # group_vars rather than repeated here: a second copy of the pin would
+      # eventually disagree with the first, and the failure would look like
+      # stale docs rather than a version skew.
       - name: Install doc tooling
-        run: pip install --quiet docsible
+        run: |
+          pip install --quiet docsible
+          ver=$(sed -n 's/^dev_terraform_docs_version: *"\(.*\)"/\1/p' ansible/group_vars/all.yml)
+          sha=$(sed -n 's/^dev_terraform_docs_sha256: *//p' ansible/group_vars/all.yml)
+          test -n "$ver" -a -n "$sha" || { echo "could not read the terraform-docs pin from group_vars"; exit 1; }
+          echo "terraform-docs v$ver"
+          curl -fsSL -o tfd.tar.gz \
+            "https://github.com/terraform-docs/terraform-docs/releases/download/v${ver}/terraform-docs-v${ver}-linux-amd64.tar.gz"
+          echo "${sha}  tfd.tar.gz" | sha256sum -c -
+          tar xzf tfd.tar.gz terraform-docs
+          sudo install -m 0755 terraform-docs /usr/local/bin/terraform-docs
+          rm -f tfd.tar.gz terraform-docs
 
       - uses: hashicorp/setup-packer@main
         with:
