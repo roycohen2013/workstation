@@ -37,6 +37,32 @@
 # --- SSH server ---------------------------------------------------------------
 # A laptop image usually wants sshd off. It is force-enabled during the build
 # because that is Packer's only way in; the seal role turns it back off.
+#
+# Nothing here can assume an SSH server exists. Ubuntu Desktop ships only the
+# client, which creates /etc/ssh/ssh_config.d -- note the missing "d" -- and
+# not the /etc/ssh/sshd_config.d that the drop-in below writes into, nor the
+# sshd binary its validate step runs, nor the ssh unit the task after it
+# manages. The image never hit this because Packer's autoinstall installs the
+# server for its own use, so `make apply` on a stock desktop install was the
+# first thing to try configuring a server that was not there, and died with
+# "Destination directory /etc/ssh/sshd_config.d does not exist".
+- name: Install the SSH server
+  ansible.builtin.apt:
+    name: openssh-server
+    state: present
+  when:
+    - workstation_phase == 'live'
+    - workstation_ssh_server_enabled | bool
+
+# Distinguishes "switched off on a machine that has one" -- where the hardening
+# drop-in and an explicit stop are both still wanted -- from "switched off on a
+# machine that never had one", where there is nothing to configure or stop.
+- name: Check whether an SSH server is installed
+  ansible.builtin.stat:
+    path: /etc/ssh/sshd_config.d
+  register: security_sshd_confdir
+  when: workstation_phase == 'live'
+
 - name: Configure SSH server
   ansible.builtin.copy:
     content: |
@@ -52,7 +78,9 @@
     dest: /etc/ssh/sshd_config.d/10-workstation.conf
     mode: "0644"
     validate: "sshd -t -f %s"
-  when: workstation_phase == 'live'
+  when:
+    - workstation_phase == 'live'
+    - security_sshd_confdir.stat.exists | default(false)
   notify: Restart sshd
 
 - name: Set SSH server run state
@@ -60,7 +88,9 @@
     name: ssh
     enabled: "{{ workstation_ssh_server_enabled | bool }}"
     state: "{{ 'started' if workstation_ssh_server_enabled | bool else 'stopped' }}"
-  when: workstation_phase == 'live'
+  when:
+    - workstation_phase == 'live'
+    - security_sshd_confdir.stat.exists | default(false)
 
 # --- Automatic updates --------------------------------------------------------
 - name: Configure unattended upgrades
