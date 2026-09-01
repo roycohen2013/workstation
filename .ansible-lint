@@ -1,0 +1,19 @@
+---
+# ansible-lint scans everything beneath the path it is given, and `make deps`
+# installs third-party collections into ansible/.collections -- gitignored,
+# vendored code this repo does not own or ship.
+#
+# Without this, `make lint` on any machine that has run `make deps` reports
+# errors from community.general's own sanity-ignore files: nobody here can fix
+# them, they change with every collection release, and they bury the findings
+# that do matter. A linter whose output is mostly noise stops being read.
+#
+# CI never saw this. Its lint job installs ansible with pip and never runs
+# `make deps`, so ansible/.collections does not exist there -- which is
+# precisely why it only surfaced once the linters were installed on a real
+# workstation.
+#
+# .yamllint already ignores the same directory for the same reason; this
+# brings ansible-lint into line with it rather than introducing a new policy.
+exclude_paths:
+  - ansible/.collections/

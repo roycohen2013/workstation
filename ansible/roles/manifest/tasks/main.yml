@@ -80,6 +80,6 @@
 # render-docs.py joins the two.
 - name: Record the declared set alongside the manifest
   ansible.builtin.copy:
-    content: "{{ { 'declared': manifest_declared, 'absent': apps_apt_absent } | to_nice_json }}\n"
+    content: "{{ {'declared': manifest_declared, 'absent': apps_apt_absent} | to_nice_json }}\n"
     dest: /etc/workstation-declared.json
     mode: "0644"
