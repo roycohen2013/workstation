@@ -28,7 +28,7 @@
           phase={{ workstation_phase }}
           user={{ workstation_user }}
           version={{ workstation_image_version }}
-          virtual={{ ansible_virtualization_role | default('unknown') }}
+          virtual={{ ansible_facts['virtualization_role'] | default('unknown') }}
       tags: always
 
     - name: Refresh apt cache

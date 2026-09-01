@@ -14,7 +14,7 @@
 
 - name: Detect virtualisation
   ansible.builtin.set_fact:
-    hardware_is_virtual: "{{ ansible_virtualization_role | default('host') == 'guest' }}"
+    hardware_is_virtual: "{{ ansible_facts['virtualization_role'] | default('host') == 'guest' }}"
 
 - name: Set power management service state
   ansible.builtin.systemd:
