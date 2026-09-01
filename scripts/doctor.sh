@@ -51,6 +51,37 @@ for t in yamllint ansible-lint shellcheck terraform terraform-docs docsible xorr
     fi
 done
 
+# --- Pinned tool versions -----------------------------------------------------
+# versions.env is what CI installs. A local mismatch is not an error -- you are
+# allowed a newer packer than CI -- but it explains the class of bug where a
+# build passes on one and fails on the other, which is otherwise baffling.
+section "Tool versions vs CI pins"
+
+if [ -f versions.env ]; then
+    pinned_packer="$(sed -n 's/^PACKER_VERSION=//p' versions.env)"
+    pinned_tf="$(sed -n 's/^TERRAFORM_VERSION=//p' versions.env)"
+    if command -v packer >/dev/null 2>&1 && [ -n "$pinned_packer" ]; then
+        have="$(packer version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+        if [ "$have" = "$pinned_packer" ]; then
+            ok "packer $have matches the CI pin"
+        else
+            warn "packer $have locally, CI pins $pinned_packer" \
+                "not fatal, but differences here explain 'works locally, fails in CI'"
+        fi
+    fi
+    if command -v terraform >/dev/null 2>&1 && [ -n "$pinned_tf" ]; then
+        have="$(terraform version 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)"
+        if [ "$have" = "$pinned_tf" ]; then
+            ok "terraform $have matches the CI pin"
+        else
+            warn "terraform $have locally, CI pins $pinned_tf" \
+                "not fatal; see versions.env"
+        fi
+    fi
+else
+    warn "versions.env is missing" "CI reads its tool pins from it"
+fi
+
 # --- Virtualisation -----------------------------------------------------------
 section "Virtualisation"
 

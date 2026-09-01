@@ -25,13 +25,24 @@ packer {
 locals {
   artifact_name = "${var.image_name}-${var.version}"
   build_date    = formatdate("YYYY-MM-DD'T'hh:mm:ssZ", timestamp())
+
+  # Derived from ubuntu_release so the release is written down once. A
+  # variable default cannot reference another variable, which is why these
+  # are locals and why the corresponding variables default to empty rather
+  # than to a URL with the release baked into it.
+  iso_url = var.iso_url != "" ? var.iso_url : (
+    "https://releases.ubuntu.com/${var.ubuntu_release}/ubuntu-${var.ubuntu_release}-live-server-amd64.iso"
+  )
+  iso_checksum = var.iso_checksum != "" ? var.iso_checksum : (
+    "file:https://releases.ubuntu.com/${var.ubuntu_release}/SHA256SUMS"
+  )
 }
 
 source "qemu" "workstation" {
   vm_name = "${local.artifact_name}.qcow2"
 
-  iso_url      = var.iso_url
-  iso_checksum = var.iso_checksum
+  iso_url      = local.iso_url
+  iso_checksum = local.iso_checksum
 
   # --- Firmware -------------------------------------------------------------
   # UEFI with a q35 machine type, matching modern laptop firmware.

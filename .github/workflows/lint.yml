@@ -45,9 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - uses: hashicorp/setup-packer@main
         with:
-          version: "1.14.2"
+          version: ${{ env.PACKER_VERSION }}
 
       - name: Format check
         run: packer fmt -check -diff packer/
@@ -62,9 +65,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.13.3"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Format check
         run: terraform fmt -check -recursive terraform/
@@ -95,6 +101,9 @@ jobs:
       # group_vars rather than repeated here: a second copy of the pin would
       # eventually disagree with the first, and the failure would look like
       # stale docs rather than a version skew.
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - name: Install doc tooling
         run: |
           pip install --quiet docsible
@@ -111,7 +120,7 @@ jobs:
 
       - uses: hashicorp/setup-packer@main
         with:
-          version: "1.14.2"
+          version: ${{ env.PACKER_VERSION }}
 
       # Regenerates every committed doc and fails if anything moved. This is
       # what stops docs/ being decorative -- without it nothing would ever

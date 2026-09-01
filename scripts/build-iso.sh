@@ -10,7 +10,22 @@
 # Both end up running the same ansible/site.yml, so they cannot drift.
 set -euo pipefail
 
-RELEASE="${RELEASE:-26.04}"
+# The Ubuntu release is written down once, in packer/variables.pkr.hcl, and
+# read from there rather than copied here. Two copies drift: the ISO built by
+# this script and the image built by Packer would silently target different
+# releases, and nothing downstream would notice until something built against
+# the wrong suite. Parsed rather than sourced because that file is HCL; if the
+# parse ever stops working the script stops with it instead of guessing.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -z "${RELEASE:-}" ]; then
+    RELEASE="$(sed -n '/variable "ubuntu_release"/,/^}/ s/.*default *= *"\([^"]*\)".*/\1/p' \
+        "${REPO_ROOT}/packer/variables.pkr.hcl")"
+fi
+if [ -z "$RELEASE" ]; then
+    echo "error: could not read ubuntu_release from packer/variables.pkr.hcl" >&2
+    echo "       set RELEASE=<version> to override, and fix the parse in this script" >&2
+    exit 1
+fi
 ISO_NAME="ubuntu-${RELEASE}-live-server-amd64.iso"
 ISO_URL="${ISO_URL:-https://releases.ubuntu.com/${RELEASE}/${ISO_NAME}}"
 SUMS_URL="${SUMS_URL:-https://releases.ubuntu.com/${RELEASE}/SHA256SUMS}"
