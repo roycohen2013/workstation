@@ -11,7 +11,12 @@ Generated from source by `make docs-config`. CI regenerates these and fails if t
 | [packer.md](packer.md) | Packer build variables |
 | [terraform.md](terraform.md) | Terraform module inputs and outputs |
 | [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |
+| [changing-config.md](changing-config.md) | Adding software and changing settings |
+| [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |
+| [image-contents.md](image-contents.md) | Knowing what is inside a built image |
+| [publishing.md](publishing.md) | Uploading artifacts and moving the channel pointer |
+| [secrets.md](secrets.md) | What is deliberately not in this repo |
 
 The contents of a *built image* are documented separately, in the `docs.html` rendered beside each artifact by `scripts/render-docs.py`.
 
-`aws-s3-setup.md` is hand-written, not generated -- everything else in this table is produced from source by this script.
+The first four are produced from source by this script. The rest are hand-written, and live here rather than in README.md to keep that file short enough to read on a cold return.

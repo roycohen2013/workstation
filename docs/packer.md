@@ -14,8 +14,8 @@ Inputs to `packer/`, with the defaults they take when not overridden. Override o
 | `disk_size` | "24G" |
 | `headless` | "true" |
 | `image_name` | "workstation" |
-| `iso_checksum` | "file:https://releases.ubuntu.com/26.04/SHA256SUMS" |
-| `iso_url` | "https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso" |
+| `iso_checksum` | "" |
+| `iso_url` | "" |
 | `memory` | "4096" |
 | `output_dir` | "build" |
 | `ovmf_code` | "/usr/share/OVMF/OVMF_CODE_4M.fd" |
