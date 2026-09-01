@@ -169,6 +169,11 @@ versions.env                 tool versions CI installs
 
 - **`lint.yml`** runs on every push: yamllint, ansible-lint, playbook syntax
   check in both phases, `packer validate`, `terraform validate`, shellcheck.
+- **`apply.yml`** runs the live half of the playbook for real, on a runner,
+  whenever `ansible/` changes and weekly. It then runs it a *second* time and
+  reports how much changed — a playbook that never settles is broken in a way
+  a single run cannot show. This is the only CI job that executes the config
+  rather than analysing it.
 - **`build.yml`** runs on a tag, on demand, or weekly. It is not run per-commit
   on purpose — a full build is 30-60 minutes and several GB of upload.
 
