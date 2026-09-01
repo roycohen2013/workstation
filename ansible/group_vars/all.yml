@@ -146,6 +146,16 @@ apps_apt_dev:
   - direnv
   - shellcheck
   - make
+  # The rest of what `make lint` needs, so a machine built from this image can
+  # lint the repo that produced it -- shellcheck and make are already above.
+  # ansible-core, not the full `ansible` bundle: it is what provides
+  # ansible-playbook, which lint-ansible runs for its syntax check, and this
+  # repo installs its collections separately from ansible/requirements.yml.
+  # pipx is here for docsible, which is PyPI-only -- see roles/dev.
+  - yamllint
+  - ansible-lint
+  - ansible-core
+  - pipx
 
 # --- APT: desktop ------------------------------------------------------------
 # Ignored entirely when workstation_desktop_enabled is false.
@@ -199,7 +209,7 @@ apps_apt_repos:
     repo: >-
       deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
       https://download.docker.com/linux/ubuntu
-      {{ ansible_distribution_release }} stable
+      {{ ansible_facts['distribution_release'] }} stable
     packages:
       - docker-ce
       - docker-ce-cli
@@ -215,7 +225,7 @@ apps_apt_repos:
     # working whichever entry ends up on disk -- see roles/apps.
     key_armoured: true
     key_path: /usr/share/keyrings/claude-desktop-archive-keyring.asc
-    # Suite is literally "stable" -- NOT {{ ansible_distribution_release }}.
+    # Suite is literally "stable" -- NOT the Ubuntu codename.
     # This repo publishes one suite for all releases, so templating the Ubuntu
     # codename here would 404. Key fingerprint per Anthropic's docs:
     #   31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
@@ -232,7 +242,7 @@ apps_apt_repos:
     # https rather than the http Google documents: apt verifies signatures
     # either way, so this is about not advertising which packages we fetch.
     # Suite is "stable" -- Google publishes one suite for all releases, so
-    # {{ ansible_distribution_release }} would 404 here (same as claude-desktop).
+    # the Ubuntu codename would 404 here (same as claude-desktop).
     repo: >-
       deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg]
       https://dl.google.com/linux/chrome/deb/
@@ -293,7 +303,7 @@ apps_apt_repos:
     repo: >-
       deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
       https://apt.releases.hashicorp.com
-      {{ ansible_distribution_release }} main
+      {{ ansible_facts['distribution_release'] }} main
     packages:
       - packer
       - terraform

@@ -17,6 +17,25 @@
     - { src: /usr/bin/batcat, dest: /usr/local/bin/bat }
   failed_when: false
 
+# --- Repo tooling -------------------------------------------------------------
+# The rest of what `make lint` needs is apt data in apps_apt_dev. docsible is
+# not: it generates the per-role README files that `make lint-docs` checks for
+# staleness, and it is published on PyPI only. Ubuntu's Python is externally
+# managed (PEP 668), so a plain `pip install` refuses to run at all -- hence
+# pipx, which builds it an isolated venv.
+#
+# --global is the part that matters. Without it pipx installs into the calling
+# user's ~/.local/bin, and this image is flashed onto machines rather than
+# built per-user: a tool in one home directory is off PATH for everyone else,
+# and disappears with that home if the user is recreated. --global puts the
+# venv in /opt/pipx and links the app into /usr/local/bin instead -- confirmed
+# against pipx 1.8.0's own --help, the version resolute ships, rather than
+# assumed from current docs.
+- name: Install docsible
+  ansible.builtin.command:
+    cmd: pipx install --global docsible
+    creates: /usr/local/bin/docsible
+
 # --- Docker -------------------------------------------------------------------
 - name: Add user to the docker group
   ansible.builtin.user:
