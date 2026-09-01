@@ -108,6 +108,28 @@ make docs-config  regenerate the committed reference docs under docs/
 make lint       run every linter
 ```
 
+### If `make apply` hangs on the password and then times out
+
+On Ubuntu 26.04, `/usr/bin/sudo` is `sudo-rs` rather than the classic
+implementation. It deliberately refuses to display a caller-supplied `-p`
+prompt verbatim, echoing it inside a `[sudo: ...]` annotation and prompting
+with its own generic `Password:` instead. Ansible watches for the exact
+key-tagged prompt it asked for, never sees it, and fails with:
+
+```
+Timed out waiting for become success or become password prompt.
+```
+
+The password is not the problem, and neither is anything in this repo -- plain
+`sudo` works fine on such a machine. `make apply` handles this already: where
+Ubuntu's classic `sudo.ws` binary is present it points Ansible at it via
+`ansible_become_exe`, and where it is not, nothing changes. If you invoke
+`ansible-playbook` by hand rather than through `make`, add the same flag:
+
+```
+-e ansible_become_exe=/usr/bin/sudo.ws
+```
+
 ## Knowing what is in an image
 
 Every build records what actually got installed and renders it beside the image:

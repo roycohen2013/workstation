@@ -21,6 +21,28 @@ PLAYBOOK    := ansible/site.yml
 
 export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
 
+# Ubuntu 26.04 points /usr/bin/sudo at sudo-rs, the Rust reimplementation.
+# It treats a caller-supplied -p prompt as untrusted text: instead of showing
+# it, it echoes it inside a "[sudo: ...]" annotation and then prompts with its
+# own generic "Password:". Ansible's become plugin waits for the exact
+# key-tagged prompt it asked for, never sees it, and every run dies with
+# "Timed out waiting for become success or become password prompt" -- with a
+# correct password, and with sudo sitting there ready to accept it.
+#
+# Confirmed by running the two binaries side by side with the same -p string:
+#   sudo-rs      [sudo: [sudo via ansible, key=X] password:] Password:
+#   classic sudo [sudo via ansible, key=X] password:
+# and then by pointing become_exe at the classic binary and feeding Ansible a
+# deliberately wrong password: it changes from timing out without ever
+# submitting anything to submitting it and getting "Sorry, try again" back,
+# which is prompt detection working.
+#
+# Ubuntu keeps the classic implementation installed alongside as sudo.ws. On
+# any machine without it this expands to nothing and the default sudo is used,
+# so this stays a no-op everywhere the problem does not exist.
+SUDO_WS    := $(shell command -v sudo.ws 2>/dev/null)
+BECOME_EXE := $(if $(SUDO_WS),-e ansible_become_exe=$(SUDO_WS),)
+
 .PHONY: help
 help: ## Show this help
 	@echo "Workstation image build"
@@ -151,6 +173,7 @@ apply: deps ## Converge THIS machine to the config (no reimage)
 	  -i localhost, -c local \
 	  -e workstation_phase=live \
 	  -e workstation_image_version=$(VERSION) \
+	  $(BECOME_EXE) \
 	  --ask-become-pass $(ARGS)
 
 .PHONY: apply-check
@@ -158,6 +181,7 @@ apply-check: deps ## Show what `make apply` would change, without changing it
 	ansible-playbook $(PLAYBOOK) \
 	  -i localhost, -c local \
 	  -e workstation_phase=live \
+	  $(BECOME_EXE) \
 	  --check --diff --ask-become-pass $(ARGS)
 
 # --- Documentation -----------------------------------------------------------
