@@ -94,7 +94,17 @@ next `make image` retries cleanly rather than failing with "Output directory
 
 ## Everyday commands
 
+**Coming back to this after a while, run `make doctor` first.** It checks in a
+couple of seconds whether the machine still matches what the repo assumes --
+KVM access, which `sudo` implementation is active, whether the pinned Ansible
+collections are the ones actually loading, and whether apt's sources are
+readable. Nearly every failure this repo has hit was environment drift of that
+kind rather than broken config, and each one otherwise surfaced deep inside a
+40-minute build. When something does break, `TROUBLESHOOTING.md` is organised
+by the exact error text.
+
 ```
+make doctor     check this machine still matches what the repo assumes
 make image      build the golden image (qcow2 + raw)
 make iso        build an unattended installer ISO
 make test       boot the built image in libvirt and verify

@@ -54,6 +54,10 @@ help: ## Show this help
 
 # --- Dependencies -------------------------------------------------------------
 
+.PHONY: doctor
+doctor: ## Check this machine still matches what the repo assumes
+	@scripts/doctor.sh
+
 .PHONY: deps
 deps: ## Install Ansible collections
 	ansible-galaxy collection install -r ansible/requirements.yml
