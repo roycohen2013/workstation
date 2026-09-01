@@ -273,11 +273,25 @@ apps_apt_repos:
     packages:
       - code
 
+  # Vendor key path, not this repo's default. Packer and Terraform are
+  # requirements of this project, so a machine is very likely to have already
+  # installed them by following HashiCorp's own instructions -- which write
+  # /etc/apt/sources.list.d/hashicorp.list, the same file apt_repository
+  # writes, with signed-by pointing at their path. Declaring our own path
+  # there appends a second line for the same origin, and apt then refuses to
+  # read its source list at all:
+  #   E:Conflicting values set for option Signed-By regarding source
+  #   https://apt.releases.hashicorp.com/ ... E:The list of sources could not
+  #   be read.
+  # Matching their documented layout makes our line identical to theirs, so
+  # the two collapse into one instead of conflicting. The key itself is the
+  # same either way -- verified byte-identical (sha256) at both paths.
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg
+    key_path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
     repo: >-
-      deb [arch=amd64 signed-by=/etc/apt/keyrings/hashicorp.gpg]
+      deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
       https://apt.releases.hashicorp.com
       {{ ansible_distribution_release }} main
     packages:
