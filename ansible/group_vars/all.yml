@@ -461,6 +461,18 @@ apps_snap: []
 
 # --- Flatpak (flathub) -------------------------------------------------------
 apps_flatpak:
+  # Obsidian, from Flathub rather than the official .deb. The .deb is 102MB and
+  # would need pinning with a checksum the way balena_etcher, terraform-docs and
+  # nimbalyst are -- a fourth hand-maintained pin on an app that releases often.
+  # The flatpak needs no version and updates itself, and the sandbox is not in
+  # the way: Flathub's manifest already grants home, /media, /mnt and
+  # /run/media, so vaults are reachable, plus a wayland socket and
+  # org.freedesktop.secrets for sync credentials.
+  #
+  # Note for anyone automating against their releases: obsidianmd's
+  # /releases/latest returns the ANDROID APK, because mobile and desktop ship
+  # from one repository. The desktop assets live on a different tag.
+  - md.obsidian.Obsidian
   - com.spotify.Client
   - org.signal.Signal
 
