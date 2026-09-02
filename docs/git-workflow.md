@@ -86,3 +86,11 @@ Branch protection does not apply to the repository owner, so a genuine emergency
 can still be pushed straight to `main`. That is deliberate, and it is not the
 normal path — everything routine, including everything an agent does, goes
 through a pull request.
+
+Be clear-eyed about what that means: an agent working in this repository pushes
+with the owner's credentials, so protection does **not** stop it either. The
+workflow holds because the agent is instructed to follow it — in
+`.claude/skills/config-change/SKILL.md` and here — not because a rule blocks the
+alternative. If that turns out to be too weak a guarantee, the fix is to enforce
+protection on administrators too and accept that a one-character typo fix then
+needs a pull request and a fifteen-minute wait.
