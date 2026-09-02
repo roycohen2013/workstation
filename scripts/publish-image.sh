@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Upload a built image to the artifact bucket and move a channel pointer at it.
+# Upload a built image to the artifact bucket and point a channel at it.
 #
 # Retention lives here rather than in Terraform (see terraform/artifacts/main.tf)
 # so there is exactly one place that decides how many builds are kept.

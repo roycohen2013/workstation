@@ -64,7 +64,7 @@ Two placements deserve a second thought:
   `apps_apt_base`. Listing them separately means apt tries to install them before the
   repo exists.
 - **`hardware_packages` installs into every image**, VM builds included. That is
-  deliberate — the golden image gets flashed onto metal, and a VM-built image missing
+  deliberate — the image gets flashed onto metal, and a VM-built image missing
   `linux-firmware` is a laptop with no Wi-Fi. Don't "optimise" it away.
 
 ## Step 2 — Trace what else the change touches

@@ -228,7 +228,7 @@ def main():
              "| [changing-config.md](changing-config.md) | Adding software and changing settings |\n",
              "| [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |\n",
              "| [image-contents.md](image-contents.md) | Knowing what is inside a built image |\n",
-             "| [publishing.md](publishing.md) | Uploading artifacts and moving the channel pointer |\n",
+             "| [publishing.md](publishing.md) | Uploading artifacts and moving the channel |\n",
              "| [secrets.md](secrets.md) | What is deliberately not in this repo |\n",
              "\nThe contents of a *built image* are documented separately, in the "
              "`docs.html` rendered beside each artifact by `scripts/render-docs.py`.\n",

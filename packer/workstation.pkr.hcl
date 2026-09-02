@@ -4,7 +4,7 @@
 # http/user-data -> Packer connects over SSH -> Ansible provisions everything
 # -> the seal role strips machine identity -> qcow2 + raw are exported.
 #
-# The same Ansible playbook runs against a live machine via `make apply`, so
+# The same Ansible playbook runs against a running machine via `make apply`, so
 # the image is a cached snapshot of the desired state, not a separate one.
 
 packer {

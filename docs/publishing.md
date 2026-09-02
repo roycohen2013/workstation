@@ -10,7 +10,7 @@ terraform init && terraform apply     # creates the R2 bucket
 eval "$(terraform output -raw usage)" # exports the env the scripts want
 cd ../..
 
-make publish     # upload + move the 'stable' channel pointer
+make publish     # upload + move the 'stable' channel
 make fetch       # on another machine
 ```
 

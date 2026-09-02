@@ -16,7 +16,9 @@ VERSION     ?= $(shell date -u +%Y.%m.%d)-$(GIT_SHA)$(GIT_DIRTY)
 
 BUILD_DIR   ?= build
 IMAGE_NAME  ?= workstation
-ARTIFACT    := $(BUILD_DIR)/$(IMAGE_NAME)-$(VERSION)
+# The directory a build's artifacts land in -- not an artifact itself.
+# See CONTEXT.md: an artifact is one published file.
+ARTIFACT_DIR := $(BUILD_DIR)/$(IMAGE_NAME)-$(VERSION)
 PLAYBOOK    := ansible/site.yml
 
 export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
@@ -105,7 +107,7 @@ init: ## Install Packer plugins
 	packer init packer/
 
 .PHONY: image
-image: check-tools init deps ## Build the golden image (qcow2 + raw)
+image: check-tools init deps ## Build the image (qcow2 + raw)
 	# -force: the qemu builder refuses to run if its output directory already
 	# exists, and a build that dies partway (crash, Ctrl-C, a machine reboot
 	# mid-compression) always leaves one behind. Without this, every retry
@@ -121,8 +123,8 @@ image: check-tools init deps ## Build the golden image (qcow2 + raw)
 	  $(ARGS) \
 	  packer/
 	@echo
-	@echo "Built $(ARTIFACT).{qcow2,raw}.zst"
-	@ls -lh $(ARTIFACT)/ 2>/dev/null || true
+	@echo "Built $(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).{qcow2,raw}.zst"
+	@ls -lh $(ARTIFACT_DIR)/ 2>/dev/null || true
 
 .PHONY: image-debug
 image-debug: check-tools init deps ## Build with the installer visible, for debugging
@@ -137,11 +139,11 @@ iso: ## Build the unattended installer ISO
 
 .PHONY: test
 test: ## Boot the built image in libvirt and check it comes up
-	@test -f "$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	@test -f "$(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).qcow2" \
 	  || { echo "No image for $(VERSION). Run 'make image' first."; exit 1; }
 	terraform -chdir=terraform/testlab init -input=false
 	terraform -chdir=terraform/testlab apply -auto-approve \
-	  -var "image_path=$(CURDIR)/$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	  -var "image_path=$(CURDIR)/$(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).qcow2" \
 	  -var "version=$(VERSION)"
 	@echo
 	@echo "VM booted and took a DHCP lease:"
@@ -157,7 +159,7 @@ test-down: ## Destroy the test VM
 # --- Distribute ---------------------------------------------------------------
 
 .PHONY: publish
-publish: ## Upload the built image and move the channel pointer
+publish: ## Upload the built image and move the channel
 	VERSION=$(VERSION) scripts/publish-image.sh
 
 .PHONY: fetch
@@ -196,13 +198,13 @@ verify-repos: ## Check every third-party apt repo declared in group_vars
 
 .PHONY: docs
 docs: ## Render the built image's contents as HTML and show where it is
-	@test -f "$(ARTIFACT)/workstation-manifest.json" \
+	@test -f "$(ARTIFACT_DIR)/workstation-manifest.json" \
 	  || { echo "No manifest for $(VERSION). Run 'make image' first."; exit 1; }
 	python3 scripts/render-docs.py \
-	  --manifest "$(ARTIFACT)/workstation-manifest.json" \
-	  --declared "$(ARTIFACT)/workstation-declared.json" \
-	  -o "$(ARTIFACT)/docs.html"
-	@echo "Open: $(ARTIFACT)/docs.html"
+	  --manifest "$(ARTIFACT_DIR)/workstation-manifest.json" \
+	  --declared "$(ARTIFACT_DIR)/workstation-declared.json" \
+	  -o "$(ARTIFACT_DIR)/docs.html"
+	@echo "Open: $(ARTIFACT_DIR)/docs.html"
 
 .PHONY: docs-config
 docs-config: ## Regenerate the committed reference docs from source

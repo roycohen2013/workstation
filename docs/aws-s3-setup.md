@@ -219,7 +219,7 @@ make fetch                             # on this or another machine
 
 `fetch-image.sh` verifies SHA256SUMS before treating anything as usable, so a
 successful `make fetch` is a genuine end-to-end confirmation: the bucket accepted the
-upload, the channel pointer moved, and the checksum on the way back down matches.
+upload, the channel moved, and the checksum on the way back down matches.
 
 ## 5. Wire it into CI (optional)
 

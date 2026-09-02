@@ -331,7 +331,7 @@ capture requires elevation.
 _(list or block — see the file)_
 
 ## Hardware (Laptop)
- Installed in every image, including VM builds, because the golden image is
+ Installed in every image, including VM builds, because the image is
  meant to be flashable onto metal. firstboot decides at runtime whether to
  actually enable the power/thermal services.
 

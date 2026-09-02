@@ -21,7 +21,7 @@ This repo avoids that by running **one Ansible playbook in two phases**:
 | `live`  | against the machine you are on | `make apply` |
 
 Same roles, same variables, same result. The image is a *cached snapshot* of
-the state your live machine converges to — so a rebuild is for a clean slate or
+the state your running machine converges to — so a rebuild is for a clean slate or
 a new machine, not for routine changes.
 
 ```
@@ -105,12 +105,12 @@ by the exact error text.
 
 ```
 make doctor     check this machine still matches what the repo assumes
-make image      build the golden image (qcow2 + raw)
+make image      build the image (qcow2 + raw)
 make iso        build an unattended installer ISO
 make test       boot the built image in libvirt and verify
 make apply      converge THIS machine to the config, no reimage
 make apply-check  show what apply would change, without changing it
-make publish    upload to the artifact bucket, move the channel pointer
+make publish    upload to the artifact bucket, move the channel
 make fetch      download the latest published image
 make flash DEV=/dev/sdX   write an image to a disk
 make docs       render this build's contents as a browsable HTML report
@@ -129,7 +129,7 @@ This file stays short on purpose. Everything else lives in `docs/`, and
 | [docs/changing-config.md](docs/changing-config.md) | Adding software, changing settings, and the Claude skill that does it for you |
 | [docs/hardware-install.md](docs/hardware-install.md) | Getting an image onto a laptop, and what happens on first boot |
 | [docs/image-contents.md](docs/image-contents.md) | Knowing what is actually inside a built image |
-| [docs/publishing.md](docs/publishing.md) | Uploading artifacts and moving the channel pointer |
+| [docs/publishing.md](docs/publishing.md) | Uploading artifacts and moving the channel |
 | [docs/secrets.md](docs/secrets.md) | What is deliberately not in this repo, and where it goes instead |
 | [docs/configuration.md](docs/configuration.md) | Generated: every setting in `group_vars/all.yml` |
 | [docs/roles.md](docs/roles.md) | Generated: index of the Ansible roles |

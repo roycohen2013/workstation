@@ -14,7 +14,7 @@ Generated from source by `make docs-config`. CI regenerates these and fails if t
 | [changing-config.md](changing-config.md) | Adding software and changing settings |
 | [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |
 | [image-contents.md](image-contents.md) | Knowing what is inside a built image |
-| [publishing.md](publishing.md) | Uploading artifacts and moving the channel pointer |
+| [publishing.md](publishing.md) | Uploading artifacts and moving the channel |
 | [secrets.md](secrets.md) | What is deliberately not in this repo |
 
 The contents of a *built image* are documented separately, in the `docs.html` rendered beside each artifact by `scripts/render-docs.py`.

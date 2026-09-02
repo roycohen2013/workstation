@@ -6,7 +6,7 @@
 
 Two supported paths, both ending in the same configuration:
 
-**Flash the golden image** — fastest, byte-identical to what you tested.
+**Flash the image** — fastest, byte-identical to what you tested.
 
 ```bash
 make fetch                                  # or use a local build

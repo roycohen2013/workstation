@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Remaster the Ubuntu live-server ISO into an unattended installer.
 #
-# Complements the golden image rather than replacing it:
-#   golden image -> instant VM, or dd onto a disk you control
+# Complements the image rather than replacing it:
+#   image        -> instant VM, or dd onto a disk you control
 #   this ISO     -> a clean install on hardware whose disk layout you do not
 #                   know in advance, letting the real installer handle
 #                   partitioning, drivers and firmware
