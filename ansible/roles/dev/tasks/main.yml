@@ -140,3 +140,4 @@
   when:
     - dev_mise_enabled | bool
     - workstation_phase == 'live'
+    - dev_mise_install_runtimes | bool

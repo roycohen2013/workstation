@@ -71,6 +71,7 @@ jobs:
             -i localhost, -c local \
             -e workstation_phase=live \
             -e workstation_image_version=ci-${{ github.sha }} \
+            -e dev_mise_install_runtimes=false \
             --become
 
       # The real point of running it twice. A playbook that succeeds once but
@@ -95,6 +96,7 @@ jobs:
             -i localhost, -c local \
             -e workstation_phase=live \
             -e workstation_image_version=ci-${{ github.sha }} \
+            -e dev_mise_install_runtimes=false \
             --become | tee second-run.log
 
       - name: Report idempotence

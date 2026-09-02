@@ -224,6 +224,21 @@ versions in one place. Set to {} to skip.
 
 _(list or block — see the file)_
 
+### `dev_mise_install_runtimes`
+
+`true`
+
+Whether to download the runtimes above during a converge, as opposed to just
+declaring them. Separated because they are different kinds of thing: the
+declaration is configuration this repo owns, the download is several hundred
+megabytes pulled from four upstreams that can be slow or briefly broken for
+reasons that say nothing about whether this config is right.
+CI sets this false. Its apply job exists to prove the playbook converges and
+settles, and it was instead spending most of its runtime fetching toolchains
+and then failing on `mise install core:python` with a filesystem permission
+error specific to the runner image -- a red build that told you nothing.
+Left true everywhere else, so a real converge still installs them.
+
 ### `dev_terraform_docs_version`
 
 `"0.24.0"`
