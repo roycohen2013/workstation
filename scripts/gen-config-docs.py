@@ -174,7 +174,14 @@ def md_terraform():
             #
             # --indent 3 so its sections nest under the "## terraform/<name>"
             # heading written above rather than sitting level with it.
-            out = run(["terraform-docs", "markdown", "table",
+            # --lockfile=false, or this output depends on gitignored local
+            # state. terraform-docs reads .terraform.lock.hcl when present and
+            # reports the RESOLVED provider version; without it, the constraint.
+            # The lock file is gitignored, so docs generated after a local
+            # `terraform init` said "0.8.3" while CI, which never inits, said
+            # "~> 0.8.0" -- and lint-docs could not be green in both places at
+            # once. Pinning the flag makes generation deterministic everywhere.
+            out = run(["terraform-docs", "markdown", "table", "--lockfile=false",
                        "--hide", "header", "--indent", "3", str(mod)])
             if not out.strip():
                 # Loud, because the quiet version of this cost a whole

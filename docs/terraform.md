@@ -15,7 +15,7 @@
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | 5.24.0 |
+| <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | ~> 5.0 |
 
 ### Modules
 
@@ -57,7 +57,7 @@ No modules.
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | 0.8.3 |
+| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | ~> 0.8.0 |
 
 ### Modules
 
