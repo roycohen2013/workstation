@@ -49,8 +49,14 @@ base_bash_force_color_prompt: true
 desktop_info_enabled: true
 desktop_info_base_wallpaper: /usr/share/backgrounds/warty-final-ubuntu.png
 desktop_info_refresh: 2min
-desktop_info_font: /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf
-desktop_info_pointsize: 20
+desktop_info_font: /usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf
+desktop_info_pointsize: 32
+# Top right. Any ImageMagick gravity works, but corners are the sane choices:
+# NorthEast, NorthWest, SouthEast, SouthWest.
+desktop_info_gravity: NorthEast
+# Inset from that corner, in pixels. Only meaningful because the renderer
+# fits the image to the screen first -- see the note in roles/desktop.
+desktop_info_inset: 60
 base_bash_histsize: 50000
 base_bash_histfilesize: 50000
 

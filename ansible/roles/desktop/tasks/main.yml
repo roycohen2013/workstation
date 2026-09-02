@@ -136,6 +136,7 @@
       BASE="{{ desktop_info_base_wallpaper }}"
       FONT="{{ desktop_info_font }}"
       POINTSIZE="{{ desktop_info_pointsize }}"
+      INSET="{{ desktop_info_inset }}"
       OUT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/workstation"
       OUT="$OUT_DIR/desktop-info.png"
       STAMP="$OUT_DIR/desktop-info.txt"
@@ -152,6 +153,23 @@
       text="$host
       $ip"
 
+      # Fit the canvas to the screen BEFORE drawing, or the text gets cropped
+      # off. GNOME's picture-options is 'zoom', which scales the wallpaper to
+      # FILL the display and discards the overflow: a 3840x2160 image on a
+      # 3840x2400 screen is scaled to 4267x2400 and loses 213px from each side.
+      # Text inset 40px from an edge therefore lands ~170px inside the
+      # discarded region and is never seen -- which is exactly what happened.
+      #
+      # Producing the image at the screen's own resolution makes zoom a no-op:
+      # same aspect, scale 1.0, nothing cropped, so the inset below means what
+      # it says. xrandr reports the XWayland screen, which GNOME always runs;
+      # if it is unavailable the base image's own size is used, which is no
+      # worse than before.
+      geom=$(xrandr --current 2>/dev/null | awk '/\*/ {print $1; exit}')
+      if [ -z "$geom" ]; then
+          geom=$(magick identify -format '%wx%h' "$BASE")
+      fi
+
       mkdir -p "$OUT_DIR"
 
       # Re-render only when the text actually changed. Without this the timer
@@ -166,9 +184,10 @@
       # Drawn twice: a dark copy offset by one pixel, then the light text over
       # it, so it stays readable on a pale wallpaper as well as a dark one.
       magick "$BASE" \
-          -font "$FONT" -pointsize "$POINTSIZE" -gravity SouthEast \
-          -fill '#000000A0' -annotate +41+39 "$text" \
-          -fill white       -annotate +40+40 "$text" \
+          -resize "${geom}^" -gravity center -extent "$geom" \
+          -font "$FONT" -pointsize "$POINTSIZE" -gravity {{ desktop_info_gravity }} \
+          -fill '#000000A0' -annotate +$((INSET + 2))+$((INSET + 2)) "$text" \
+          -fill white       -annotate +${INSET}+${INSET} "$text" \
           "$tmp"
       mv "$tmp" "$OUT"
       printf '%s' "$text" > "$STAMP"
