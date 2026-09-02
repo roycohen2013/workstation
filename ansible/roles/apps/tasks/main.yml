@@ -309,6 +309,85 @@
   when: apps_snap | length > 0
 
 # --- Flatpaks -----------------------------------------------------------------
+# --- Nimbalyst ----------------------------------------------------------------
+# Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
+# below, the file is kept in place rather than downloaded and deleted: get_url
+# with a checksum re-verifies an existing file and reports ok, so a converge
+# does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
+# why the CI idempotence pass reports changes on every run.
+- name: Install the AppImage runtime dependency
+  ansible.builtin.apt:
+    name: libfuse2t64
+    state: present
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Create the Nimbalyst directory
+  ansible.builtin.file:
+    path: /opt/nimbalyst
+    state: directory
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Install Nimbalyst
+  ansible.builtin.get_url:
+    url: "{{ nimbalyst_appimage_url }}"
+    dest: /opt/nimbalyst/Nimbalyst.AppImage
+    checksum: "sha512:{{ nimbalyst_appimage_sha512 }}"
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
+# The AppImage carries its own icon, so it is taken from there rather than
+# committed as a binary blob. Extracting a single path costs 36KB, not the
+# ~1GB a full --appimage-extract would; guarded on the INSTALLED icon rather
+# than on the extraction directory, so cleaning up the temporary tree does not
+# make this re-run forever.
+- name: Extract and install the Nimbalyst icon
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      cd "$tmp"
+      /opt/nimbalyst/Nimbalyst.AppImage --appimage-extract \
+        usr/share/icons/hicolor/512x512/apps/nimbalyst.png >/dev/null
+      install -D -m 0644 \
+        squashfs-root/usr/share/icons/hicolor/512x512/apps/nimbalyst.png \
+        /usr/share/icons/hicolor/512x512/apps/nimbalyst.png
+    creates: /usr/share/icons/hicolor/512x512/apps/nimbalyst.png
+  when: workstation_nimbalyst_enabled | bool
+
+# Mirrors the entry inside the AppImage, with an absolute Exec. --no-sandbox is
+# not this repo being cautious: it is what the vendor's own desktop entry ships,
+# and Ubuntu sets kernel.apparmor_restrict_unprivileged_userns=1, which stops an
+# unpackaged Electron app from creating its sandbox at all.
+- name: Install the Nimbalyst desktop entry
+  ansible.builtin.copy:
+    content: |
+      [Desktop Entry]
+      Name=Nimbalyst
+      Comment=Visual workspace for coding agents
+      Exec=/opt/nimbalyst/Nimbalyst.AppImage --no-sandbox %U
+      Icon=nimbalyst
+      Terminal=false
+      Type=Application
+      StartupWMClass=Nimbalyst
+      MimeType=text/markdown;x-scheme-handler/nimbalyst;
+      Categories=Utility;Development;
+    dest: /usr/share/applications/nimbalyst.desktop
+    mode: "0644"
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Link Nimbalyst onto PATH
+  ansible.builtin.copy:
+    content: |
+      #!/bin/sh
+      # Managed by Ansible (roles/apps). See the comment above this block in
+      # ansible/roles/apps/tasks/main.yml for why --no-sandbox is here.
+      exec /opt/nimbalyst/Nimbalyst.AppImage --no-sandbox "$@"
+    dest: /usr/local/bin/nimbalyst
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
 - name: Install flatpaks
   community.general.flatpak:
     name: "{{ item }}"

@@ -114,6 +114,46 @@ instead of installing something unverified.
 
 `true`
 
+### `workstation_nimbalyst_enabled`
+
+`true`
+
+Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
+Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt
+repository, no snap, no flatpak -- confirmed against their README, which
+links the AppImage as the only Linux download. Pinned and checksummed, the
+same trust model as balena_etcher, for the same reason: a release URL alone
+verifies nothing.
+~470MB, the largest single thing in this image -- more than the four
+LibreOffice applications combined. Recorded here so that weight is
+attributable later rather than looking unaccounted for.
+v0.75.5 is the current STABLE release. The newer v0.76.0 is marked
+prerelease; the app also has its own alpha channel, switchable in
+Settings -> Advanced. Bump deliberately.
+Note their telemetry is on by default: anonymous usage analytics to PostHog,
+correlated by a random per-install ID. That ID is generated per user on first
+run, not at install, so nothing machine-specific is baked into the image and
+roles/seal needs no change. Opting out is a GUI setting
+(Settings -> Advanced -> Analytics), so it cannot be disabled declaratively.
+
+### `nimbalyst_version`
+
+`"0.75.5"`
+
+### `nimbalyst_appimage_url`
+
+_(list or block — see the file)_
+
+### `nimbalyst_appimage_sha512`
+
+`0b86fc9b173d633530d6b6e8782d99c8a447a82db8b5dae6fd2f3ee5c74576aa3c6bdcac230755fab54558b82fe212b42ff25ea1cc5201cc9708e5771432d995`
+
+From the release's own latest-linux.yml, which electron-builder publishes as
+base64; converted to the hex Ansible expects and length-checked at 128.
+A 128-character hash cannot be wrapped -- a folded scalar would inject a
+space into it -- so the length rule is waived for this one line.
+yamllint disable-line rule:line-length
+
 ### `apps_1password_debsig_key_id`
 
 `AC2D62742012EA22`

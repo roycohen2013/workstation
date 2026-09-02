@@ -114,7 +114,26 @@ skip the wrapper instead of failing loudly. |
 | Install the --no-sandbox wrapper in its place | ansible.builtin.copy | True |  |
 | Remove the downloaded BalenaEtcher package | ansible.builtin.file | True |  |
 | Install snaps | community.general.snap | True | --- Snaps -------------------------------------------------------------------- |
-| Install flatpaks | community.general.flatpak | True | --- Flatpaks ----------------------------------------------------------------- |
+| Install the AppImage runtime dependency | ansible.builtin.apt | True | --- Flatpaks -----------------------------------------------------------------
+--- Nimbalyst ----------------------------------------------------------------
+Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
+below, the file is kept in place rather than downloaded and deleted: get_url
+with a checksum re-verifies an existing file and reports ok, so a converge
+does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
+why the CI idempotence pass reports changes on every run. |
+| Create the Nimbalyst directory | ansible.builtin.file | True |  |
+| Install Nimbalyst | ansible.builtin.get_url | True |  |
+| Extract and install the Nimbalyst icon | ansible.builtin.shell | True | The AppImage carries its own icon, so it is taken from there rather than
+committed as a binary blob. Extracting a single path costs 36KB, not the
+~1GB a full --appimage-extract would; guarded on the INSTALLED icon rather
+than on the extraction directory, so cleaning up the temporary tree does not
+make this re-run forever. |
+| Install the Nimbalyst desktop entry | ansible.builtin.copy | True | Mirrors the entry inside the AppImage, with an absolute Exec. --no-sandbox is
+not this repo being cautious: it is what the vendor's own desktop entry ships,
+and Ubuntu sets kernel.apparmor_restrict_unprivileged_userns=1, which stops an
+unpackaged Electron app from creating its sandbox at all. |
+| Link Nimbalyst onto PATH | ansible.builtin.copy | True |  |
+| Install flatpaks | community.general.flatpak | True |  |
 
 
 
