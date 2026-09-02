@@ -47,7 +47,22 @@ and still leave every setting overridable by the user afterwards. |
 | Install dconf user profile | ansible.builtin.copy | False |  |
 | Ensure dconf local db directory exists | ansible.builtin.file | False |  |
 | Write GNOME defaults | ansible.builtin.template | False |  |
-| Configure GDM | ansible.builtin.copy | False | --- Login manager ------------------------------------------------------------ |
+| Compile the dconf system database | ansible.builtin.command | True | --- Login manager ------------------------------------------------------------
+dconf keyfiles are inert until they are compiled. /etc/dconf/profile/user
+names `system-db:local`, and dconf resolves that to the BINARY database at
+/etc/dconf/db/local -- not to the keyfile directory beside it. Without this
+step the role wrote /etc/dconf/db/local.d/00-workstation, nothing compiled
+it, and every setting in desktop_dconf was ignored on every machine. dconf
+said so on every access, into stderr nobody was reading:
+
+dconf-WARNING: unable to open file '/etc/dconf/db/local': No such file or
+directory; expect degraded performance
+
+Run unconditionally rather than notified by a handler: a handler only fires
+when the keyfile changes, which would leave every already-converged machine
+with a missing database forever. It is cheap and writing an identical
+database is a no-op, so changed_when is false. |
+| Configure GDM | ansible.builtin.copy | False |  |
 | Fail early if the base wallpaper is missing | ansible.builtin.stat | True | --- Flatpak ------------------------------------------------------------------
 --- Hostname and IP on the desktop -------------------------------------------
 Stamped onto the wallpaper rather than drawn by a widget. See the note in
