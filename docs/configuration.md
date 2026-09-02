@@ -44,6 +44,26 @@ Every setting in `ansible/group_vars/all.yml`, with the explanation that accompa
 
 `us`
 
+### `base_bash_force_color_prompt`
+
+`true`
+
+**Interactive shell defaults**
+Applied to Ubuntu's shipped .bashrc, in /etc/skel (so users created later
+inherit them) and in workstation_user's home (already populated from skel by
+the time this runs). These are shell defaults for the image, distinct from
+personal dotfiles -- roles/dotfiles deliberately pulls those at first login
+rather than baking them in. If chezmoi is later given .bashrc to manage, it
+owns the file and these settings are whatever that repository says.
+
+### `base_bash_histsize`
+
+`50000`
+
+### `base_bash_histfilesize`
+
+`50000`
+
 ### `workstation_authorized_keys`
 
 `[]`

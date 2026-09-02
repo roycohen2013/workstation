@@ -21,6 +21,17 @@ workstation_timezone: America/New_York
 workstation_locale: en_US.UTF-8
 workstation_keyboard_layout: us
 
+# --- Interactive shell defaults ----------------------------------------------
+# Applied to Ubuntu's shipped .bashrc, in /etc/skel (so users created later
+# inherit them) and in workstation_user's home (already populated from skel by
+# the time this runs). These are shell defaults for the image, distinct from
+# personal dotfiles -- roles/dotfiles deliberately pulls those at first login
+# rather than baking them in. If chezmoi is later given .bashrc to manage, it
+# owns the file and these settings are whatever that repository says.
+base_bash_force_color_prompt: true
+base_bash_histsize: 50000
+base_bash_histfilesize: 50000
+
 # Public keys authorised for SSH into this machine. Leave empty to disable
 # key-based login. Private keys NEVER belong in this repo or the image.
 workstation_authorized_keys: []
