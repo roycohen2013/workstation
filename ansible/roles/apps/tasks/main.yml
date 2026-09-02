@@ -143,7 +143,7 @@
     cmd: >-
       gpg --batch --yes --dearmor
       -o /usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg
-      /tmp/1password.asc
+      /var/cache/workstation/keys/1password.asc
     creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
   when: workstation_1password_enabled | bool
 
