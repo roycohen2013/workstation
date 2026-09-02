@@ -43,9 +43,16 @@ Description: Third-party APT repositories, snaps and flatpaks, all declared as d
 to a string. selectattr() would truth-test that string, and a non-empty
 "False" is truthy -- silently enabling a repository that is switched off.
 An explicit `| bool` is the only reliable test here. |
-| Fetch repository signing keys | ansible.builtin.get_url | False | Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
+| Ensure the key cache exists | ansible.builtin.file | False | Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
 signed-by, rather than added to the deprecated global trusted keyring where
-any one vendor key would be trusted to sign any package. |
+any one vendor key would be trusted to sign any package.
+Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
+file against what it fetches and reports ok when they match -- but only if
+the file is still there. Deleting it made this task, and the dearmour and
+apt_repository tasks below it, report changed on every single converge; the
+CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
+also survives a reboot. This is public key material, a few KB per vendor. |
+| Fetch repository signing keys | ansible.builtin.get_url | False |  |
 | Install repository signing keys (dearmoured) | ansible.builtin.command | True | Key handling is two independent choices, because vendors differ on both:
 key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
 key_armoured whether to copy the .asc verbatim or dearmour it first
@@ -78,7 +85,6 @@ If its version wins and names a keyring we never created, every later apt
 update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
 that, so it has to exist BEFORE the package installs. |
 | Install packages from third-party repositories | ansible.builtin.apt | True |  |
-| Remove downloaded key material | ansible.builtin.file | False |  |
 | Add the workstation user to the kvm group for Cowork | ansible.builtin.user | True | Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 the latter -- so joining the group is required even where /dev/kvm alone is
@@ -87,12 +93,19 @@ already accessible.
 This lives here, not in workstation_user_groups, because roles/base creates
 the user long before these packages exist: the kvm group is created by the
 qemu recommends pulled in just above, so joining it any earlier fails. |
-| Download BalenaEtcher | ansible.builtin.get_url | True | --- BalenaEtcher ---------------------------------------------------------
+| Check the installed BalenaEtcher version | ansible.builtin.command | True | --- BalenaEtcher ---------------------------------------------------------
 No apt repository exists in current vendor docs -- only a versioned .deb
 from GitHub releases, installed the way the vendor itself documents:
 `apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
 is exactly that -- apt, not raw dpkg, so dependencies resolve against the
-configured archive automatically. |
+configured archive automatically.
+Gated on what is already installed. The .deb is ~150MB and is deleted after
+installing, so without this it was re-downloaded on every converge and this
+task, the install and the cleanup all reported changed forever -- which is
+what the CI idempotence pass reports. Deleting it is still right: keeping
+150MB of installer in the image to gain idempotence would be a bad trade,
+so the version check provides it instead. |
+| Download BalenaEtcher | ansible.builtin.get_url | True |  |
 | Install BalenaEtcher | ansible.builtin.apt | True |  |
 | Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 that have nothing to do with security here -- a setuid helper with the

@@ -28,10 +28,22 @@
 # Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
 # signed-by, rather than added to the deprecated global trusted keyring where
 # any one vendor key would be trusted to sign any package.
+# Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
+# file against what it fetches and reports ok when they match -- but only if
+# the file is still there. Deleting it made this task, and the dearmour and
+# apt_repository tasks below it, report changed on every single converge; the
+# CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
+# also survives a reboot. This is public key material, a few KB per vendor.
+- name: Ensure the key cache exists
+  ansible.builtin.file:
+    path: /var/cache/workstation/keys
+    state: directory
+    mode: "0755"
+
 - name: Fetch repository signing keys
   ansible.builtin.get_url:
     url: "{{ item.key_url }}"
-    dest: "/tmp/{{ item.name }}.asc"
+    dest: "/var/cache/workstation/keys/{{ item.name }}.asc"
     mode: "0644"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
@@ -54,7 +66,7 @@
     cmd: >-
       gpg --batch --yes --dearmor
       -o {{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}
-      /tmp/{{ item.name }}.asc
+      /var/cache/workstation/keys/{{ item.name }}.asc
     creates: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
@@ -63,7 +75,7 @@
 
 - name: Install repository signing keys (armoured, verbatim)
   ansible.builtin.copy:
-    src: "/tmp/{{ item.name }}.asc"
+    src: "/var/cache/workstation/keys/{{ item.name }}.asc"
     dest: "{{ item.key_path }}"
     remote_src: true
     mode: "0644"
@@ -156,14 +168,6 @@
     state: present
   when: apps_repos_enabled | length > 0
 
-- name: Remove downloaded key material
-  ansible.builtin.file:
-    path: "/tmp/{{ item.name }}.asc"
-    state: absent
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-
 # Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 # It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 # the latter -- so joining the group is required even where /dev/kvm alone is
@@ -185,6 +189,20 @@
 # `apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
 # is exactly that -- apt, not raw dpkg, so dependencies resolve against the
 # configured archive automatically.
+# Gated on what is already installed. The .deb is ~150MB and is deleted after
+# installing, so without this it was re-downloaded on every converge and this
+# task, the install and the cleanup all reported changed forever -- which is
+# what the CI idempotence pass reports. Deleting it is still right: keeping
+# 150MB of installer in the image to gain idempotence would be a bad trade,
+# so the version check provides it instead.
+- name: Check the installed BalenaEtcher version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f='${Version}' balena-etcher
+  register: apps_etcher_installed
+  changed_when: false
+  failed_when: false
+  when: workstation_balena_etcher_enabled | bool
+
 - name: Download BalenaEtcher
   ansible.builtin.get_url:
     url: "{{ balena_etcher_deb_url }}"
@@ -193,6 +211,7 @@
     mode: "0644"
   when:
     - workstation_balena_etcher_enabled | bool
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
     - workstation_desktop_enabled | bool
 
 - name: Install BalenaEtcher
@@ -201,6 +220,7 @@
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
 
 # BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 # that have nothing to do with security here -- a setuid helper with the
@@ -294,6 +314,7 @@
     path: "/tmp/balena-etcher_{{ balena_etcher_version }}_amd64.deb"
     state: absent
   when:
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
 

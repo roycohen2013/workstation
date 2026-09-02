@@ -39,12 +39,25 @@
 # terraform-docs is neither in the Ubuntu archive nor on PyPI, so it is
 # fetched as a pinned release tarball. checksum: makes a tampered or truncated
 # download fail the task outright rather than unpacking something unverified.
+# Same gate as BalenaEtcher, for the same reason: the archive is downloaded and
+# then deleted, so without a version check this task and the two after it
+# reported changed on every converge. `terraform-docs --version` prints
+# "terraform-docs version v0.24.0 <sha> linux/amd64", so the pinned version is
+# matched as a substring rather than parsed.
+- name: Check the installed terraform-docs version
+  ansible.builtin.command:
+    cmd: terraform-docs --version
+  register: dev_tfdocs_installed
+  changed_when: false
+  failed_when: false
+
 - name: Download terraform-docs
   ansible.builtin.get_url:
     url: "{{ dev_terraform_docs_url }}"
     dest: "/tmp/terraform-docs-{{ dev_terraform_docs_version }}.tar.gz"
     checksum: "sha256:{{ dev_terraform_docs_sha256 }}"
     mode: "0644"
+  when: "'v' ~ dev_terraform_docs_version not in dev_tfdocs_installed.stdout | default('')"
 
 # The tarball holds the bare binary at its root, so extra=... would scatter
 # LICENSE and README into /usr/local/bin alongside it.
@@ -58,11 +71,13 @@
     owner: root
     group: root
     mode: "0755"
+  when: "'v' ~ dev_terraform_docs_version not in dev_tfdocs_installed.stdout | default('')"
 
 - name: Remove the downloaded terraform-docs archive
   ansible.builtin.file:
     path: "/tmp/terraform-docs-{{ dev_terraform_docs_version }}.tar.gz"
     state: absent
+  when: "'v' ~ dev_terraform_docs_version not in dev_tfdocs_installed.stdout | default('')"
 
 # --- Docker -------------------------------------------------------------------
 - name: Add user to the docker group
