@@ -190,6 +190,17 @@ apps_apt_desktop:
   # Recorded here so those libraries are attributable later: without this note,
   # a Qt6 stack on a GNOME image looks like something nobody asked for.
   - krdc
+  # Déjà Dup is ~1.8MB, but pulls restic (~25MB) as its backup engine -- version
+  # 50 switched to restic from the duplicity it used for years. Its other deps
+  # and recommends (gvfs-backends, gvfs-fuse, packagekit, fuse3) are already
+  # here via the desktop set, so restic is the whole real cost. Recorded so 25MB
+  # of Go binary is attributable later rather than looking unaccounted for.
+  #
+  # It installs an XDG autostart entry, deja-dup-monitor, which runs per-user
+  # and stays inert until someone configures a backup in their own dconf. It
+  # ships no systemd unit and writes no machine identity, so nothing needs
+  # stripping in roles/seal -- confirmed by inspecting the .deb, not assumed.
+  - deja-dup
   - xclip
   - wl-clipboard
   - wireshark
