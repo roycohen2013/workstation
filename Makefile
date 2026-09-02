@@ -144,7 +144,7 @@ test: ## Boot the built image in libvirt and check it comes up
 	terraform -chdir=terraform/testlab init -input=false
 	terraform -chdir=terraform/testlab apply -auto-approve \
 	  -var "image_path=$(CURDIR)/$(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).qcow2" \
-	  -var "version=$(VERSION)"
+	  -var "image_version=$(VERSION)"
 	@echo
 	@echo "VM booted and took a DHCP lease:"
 	@terraform -chdir=terraform/testlab output ip_address
@@ -154,7 +154,7 @@ test: ## Boot the built image in libvirt and check it comes up
 .PHONY: test-down
 test-down: ## Destroy the test VM
 	terraform -chdir=terraform/testlab destroy -auto-approve \
-	  -var "image_path=/dev/null" -var "version=$(VERSION)"
+	  -var "image_path=/dev/null" -var "image_version=$(VERSION)"
 
 # --- Distribute ---------------------------------------------------------------
 
@@ -257,8 +257,22 @@ lint-packer:
 	packer validate -syntax-only packer/
 
 .PHONY: lint-terraform
+# fmt alone only checks layout. CI has always run `validate` as well and local
+# lint did not, so `make lint` reported clean while the testlab module could not
+# even initialise: it declared a variable named "version", which Terraform
+# reserves, and its provider constraint "~> 0.8" let the breaking 0.9 schema in.
+# Both were invisible to fmt, so `make test` had never been able to work.
+#
+# Validating costs a provider download on a cold run and needs network, which is
+# presumably why it was left out. That is a poor trade against a linter that
+# passes on a module which cannot start.
 lint-terraform:
 	terraform fmt -check -recursive terraform/
+	@for dir in terraform/*/; do \
+	  echo "--- $$dir"; \
+	  terraform -chdir="$$dir" init -backend=false -input=false >/dev/null || exit 1; \
+	  terraform -chdir="$$dir" validate || exit 1; \
+	done
 
 .PHONY: lint-shell
 lint-shell:

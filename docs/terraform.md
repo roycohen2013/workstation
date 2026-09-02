@@ -15,7 +15,7 @@
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | ~> 5.0 |
+| <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | 5.24.0 |
 
 ### Modules
 
@@ -51,13 +51,13 @@ No modules.
 | Name | Version |
 | ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.6.0 |
-| <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | ~> 0.8 |
+| <a name="requirement_libvirt"></a> [libvirt](#requirement\_libvirt) | ~> 0.8.0 |
 
 ### Providers
 
 | Name | Version |
 | ---- | ------- |
-| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | ~> 0.8 |
+| <a name="provider_libvirt"></a> [libvirt](#provider\_libvirt) | 0.8.3 |
 
 ### Modules
 
@@ -75,6 +75,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 | ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_image_path"></a> [image\_path](#input\_image\_path) | Absolute path to the qcow2 produced by `make image`. | `string` | n/a | yes |
+| <a name="input_image_version"></a> [image\_version](#input\_image\_version) | Build version, used to name the test volume. | `string` | `"dev"` | no |
 | <a name="input_libvirt_uri"></a> [libvirt\_uri](#input\_libvirt\_uri) | n/a | `string` | `"qemu:///system"` | no |
 | <a name="input_memory"></a> [memory](#input\_memory) | n/a | `number` | `4096` | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | libvirt network. Must hand out DHCP leases, since the test waits for one. | `string` | `"default"` | no |
@@ -82,7 +83,6 @@ No modules.
 | <a name="input_ovmf_vars"></a> [ovmf\_vars](#input\_ovmf\_vars) | n/a | `string` | `"/usr/share/OVMF/OVMF_VARS_4M.fd"` | no |
 | <a name="input_storage_pool"></a> [storage\_pool](#input\_storage\_pool) | n/a | `string` | `"default"` | no |
 | <a name="input_vcpus"></a> [vcpus](#input\_vcpus) | n/a | `number` | `2` | no |
-| <a name="input_version"></a> [version](#input\_version) | Build version, used to name the test volume. | `string` | `"dev"` | no |
 
 ### Outputs
 

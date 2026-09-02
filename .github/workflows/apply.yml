@@ -38,7 +38,14 @@ concurrency:
 
 jobs:
   apply:
-    runs-on: ubuntu-latest
+    # Pinned to the release this repo targets, NOT ubuntu-latest. The first real
+    # run of this job died on `No package matching 'fastfetch' is available`:
+    # ubuntu-latest is still 24.04, group_vars declares packages that exist in
+    # 26.04, and the job failed for a reason that said nothing about whether the
+    # configuration is correct -- exactly the failure mode ADR-0002 warns about.
+    # Keep this in step with var.ubuntu_release in packer/variables.pkr.hcl.
+    # The 26.04 image is in public preview, so queue times can be longer.
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4

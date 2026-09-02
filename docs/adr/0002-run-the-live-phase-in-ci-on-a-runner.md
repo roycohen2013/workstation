@@ -32,3 +32,9 @@ legitimately — the manifest role rewrites its inventory by design — and a jo
 that goes red for an expected reason gets muted, taking the real signal with it.
 It does not cover the become-prompt path (see ADR-0001), because runners have
 passwordless sudo.
+
+The runner image must match the release the repo targets. The first real run
+of this job failed on a package that exists in 26.04 but not in the 24.04 that
+`ubuntu-latest` still resolves to — a failure that said nothing about the
+configuration, which is the outcome this ADR set out to avoid. It is pinned to
+`ubuntu-26.04` and has to be moved deliberately alongside `var.ubuntu_release`.
