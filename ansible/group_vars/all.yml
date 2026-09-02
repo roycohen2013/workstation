@@ -152,7 +152,6 @@ apps_apt_base:
   - zsh
   - htop
   - btop
-  - conky-all
   # neofetch was archived upstream in 2024 and dropped from the Ubuntu
   # archive; fastfetch is its actively maintained, packaged successor -- same
   # purpose, drop-in compatible config format.
@@ -264,6 +263,15 @@ apps_apt_desktop:
 # Packages to remove (Ubuntu ships a few things you may not want).
 apps_apt_absent:
   - popularity-contest
+  # Installed here for months and never configured, and it could not have
+  # worked anyway: conky is an X11 application and this desktop is GNOME on
+  # Wayland, where it has open upstream bugs -- the window not appearing,
+  # right-alignment failing, own_window_type=desktop vanishing when the desktop
+  # is clicked. Its job here, showing hostname and IP on the desktop, is done
+  # by the wallpaper stamp instead (see desktop_info_* above), which is
+  # compositor-agnostic. Declared absent rather than merely dropped from
+  # apps_apt_base, or machines already converged would keep it forever.
+  - conky-all
 
 # --- APT: third-party repositories -------------------------------------------
 # Each entry adds a signed keyring and a sources.list.d entry. Keys are
