@@ -92,6 +92,24 @@
   loop_control:
     label: "{{ item.name }}"
 
+# 1Password's postinst writes its own deb822 source at
+# /etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
+# debsig keyring too -- and then does:
+#
+#     sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
+#
+# which comments out the file apt_repository manages here. Our next converge
+# uncomments it, their next package operation comments it again, and the CI
+# idempotence pass reported "Add repositories" changed forever because of it.
+#
+# Our entry is only needed to bootstrap: once their .sources exists, it is
+# authoritative and ours is redundant. So stop declaring it, and remove the
+# commented-out leftover so exactly one declaration of the origin remains.
+- name: Check whether 1Password now manages its own apt source
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/1password.sources
+  register: apps_1password_own_source
+
 - name: Add repositories
   ansible.builtin.apt_repository:
     repo: "{{ item.repo }}"
@@ -104,6 +122,13 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+  when: not (item.name == '1password' and apps_1password_own_source.stat.exists)
+
+- name: Remove our redundant 1Password apt source
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/1password.list
+    state: absent
+  when: apps_1password_own_source.stat.exists
 
 # 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 # addition to apt verifying the repository -- so it has to be in place before

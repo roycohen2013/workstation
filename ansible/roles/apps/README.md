@@ -67,7 +67,21 @@ claude-desktop:   armoured, vendor path
 hashicorp:        dearmoured, vendor path -- see the note in group_vars |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
-| Add repositories | ansible.builtin.apt_repository | False |  |
+| Check whether 1Password now manages its own apt source | ansible.builtin.stat | False | 1Password's postinst writes its own deb822 source at
+/etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
+debsig keyring too -- and then does:
+
+sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
+
+which comments out the file apt_repository manages here. Our next converge
+uncomments it, their next package operation comments it again, and the CI
+idempotence pass reported "Add repositories" changed forever because of it.
+
+Our entry is only needed to bootstrap: once their .sources exists, it is
+authoritative and ours is redundant. So stop declaring it, and remove the
+commented-out leftover so exactly one declaration of the origin remains. |
+| Add repositories | ansible.builtin.apt_repository | True |  |
+| Remove our redundant 1Password apt source | ansible.builtin.file | True |  |
 | Create 1Password debsig directories | ansible.builtin.file | True | 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 addition to apt verifying the repository -- so it has to be in place before
 the package installs, not after.
