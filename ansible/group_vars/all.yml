@@ -39,6 +39,11 @@ workstation_claude_desktop_enabled: true
 # and used by whoever logs in. The package is system-wide and updates with the
 # rest of the system.
 workstation_claude_code_enabled: true
+# GitHub CLI, from GitHub's own repository rather than the Ubuntu archive.
+# The archive carries 2.46.0 against upstream 2.99.0 -- 53 minor versions --
+# and gh gains subcommands and flags often enough that scripting against the
+# archive build means checking what exists in it first.
+workstation_gh_enabled: true
 workstation_chrome_enabled: true
 workstation_vscode_enabled: true
 
@@ -364,6 +369,29 @@ apps_apt_repos:
       stable main
     packages:
       - claude-code
+
+  - name: github-cli
+    enabled: "{{ workstation_gh_enabled }}"
+    key_url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    # GitHub publishes a BINARY keyring, not an armoured .asc. The default
+    # path here runs `gpg --dearmor` over it, which was checked rather than
+    # assumed: dearmouring an already-binary key is a passthrough, byte for
+    # byte, so the default handling is correct as-is.
+    #
+    # key_path is the vendor's documented filename, not this repo's
+    # <name>.gpg default. Same lesson as hashicorp: when a vendor documents a
+    # keyring path, anything else it or its users install can declare that
+    # path for the same origin, and two Signed-By values for one origin make
+    # apt refuse to read its source list at all.
+    key_path: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    # Suite is "stable" -- GitHub publishes one suite for every release, so
+    # the Ubuntu codename would 404 here.
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg]
+      https://cli.github.com/packages
+      stable main
+    packages:
+      - gh
 
   - name: hashicorp
     enabled: true

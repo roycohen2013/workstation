@@ -82,6 +82,15 @@ background, which is the wrong shape for an image flashed onto many machines
 and used by whoever logs in. The package is system-wide and updates with the
 rest of the system.
 
+### `workstation_gh_enabled`
+
+`true`
+
+GitHub CLI, from GitHub's own repository rather than the Ubuntu archive.
+The archive carries 2.46.0 against upstream 2.99.0 -- 53 minor versions --
+and gh gains subcommands and flags often enough that scripting against the
+archive build means checking what exists in it first.
+
 ### `workstation_chrome_enabled`
 
 `true`
