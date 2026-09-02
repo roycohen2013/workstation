@@ -4,9 +4,13 @@ name: lint
 # Runs on every push. Deliberately does NOT build an image: a full build takes
 # 30-60 minutes and pushes several GB to object storage, which is not a
 # reasonable thing to do on every commit. See build.yml.
+# Trunk pushes and PRs only. This used to be branches: ["**"] alongside
+# pull_request, which ran the whole suite twice for every PR from a branch in
+# this repository -- invisible while everything was pushed straight to trunk,
+# wasteful the moment branches exist.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -125,8 +129,14 @@ jobs:
       # Regenerates every committed doc and fails if anything moved. This is
       # what stops docs/ being decorative -- without it nothing would ever
       # notice the reference drifting away from the code it describes.
+      # Advisory on a pull request, enforcing on trunk. docs/ is generated from
+      # group_vars, so two branches that both touch a variable conflict twice --
+      # once in the real config and once in its derived output. Blocking a PR on
+      # that would make parallel work painful for a file nobody edits by hand;
+      # trunk stays authoritative, which is what the check exists for.
       - name: Documentation is up to date
         run: make lint-docs
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
 
   shell:
     runs-on: ubuntu-latest

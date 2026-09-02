@@ -127,6 +127,7 @@ This file stays short on purpose. Everything else lives in `docs/`, and
 |---|---|
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | **Start here when something breaks** -- organised by the exact error text |
 | [docs/changing-config.md](docs/changing-config.md) | Adding software, changing settings, and the Claude skill that does it for you |
+| [docs/git-workflow.md](docs/git-workflow.md) | Branches, pull requests, worktrees, and what gates a merge |
 | [docs/hardware-install.md](docs/hardware-install.md) | Getting an image onto a laptop, and what happens on first boot |
 | [docs/image-contents.md](docs/image-contents.md) | Knowing what is actually inside a built image |
 | [docs/publishing.md](docs/publishing.md) | Uploading artifacts and moving the channel |

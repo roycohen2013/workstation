@@ -22,7 +22,9 @@ on:
     # Weekly, to catch upstream drift -- a vendor moving a repo, a package
     # disappearing, a new Ubuntu default -- rather than only on our own edits.
     - cron: "0 6 * * 1"
+  pull_request:
   push:
+    branches: [main]
     paths:
       - "ansible/**"
       - ".github/workflows/apply.yml"
@@ -49,20 +51,50 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Needed to diff a pull request against its base below.
+          fetch-depth: 0
+
+      # This job is a REQUIRED check on main, so it must report on every pull
+      # request -- including ones touching no Ansible at all. A required check
+      # that never reports blocks its PR forever, and a job skipped by `if:` is
+      # not a dependable substitute. So the job always runs and short-circuits
+      # inside itself: every step below is conditional, and a PR that changes
+      # only scripts/ or docs/ passes in seconds without converging anything.
+      - name: Decide whether a converge is needed
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "converging: not a pull request"
+            exit 0
+          fi
+          base='${{ github.event.pull_request.base.sha }}'
+          if git diff --name-only "$base"...HEAD \
+               | grep -qE '^(ansible/|\.github/workflows/apply\.yml)'; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "converging: this pull request touches ansible/"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "nothing to converge: this pull request touches no ansible/ files"
+          fi
 
       - name: Install Ansible
+        if: steps.scope.outputs.needed == 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ansible make
           ansible --version
 
       - name: Install collections
+        if: steps.scope.outputs.needed == 'true'
         run: make deps
 
       # No --ask-become-pass: the runner has passwordless sudo. That also means
       # this job does NOT exercise the become-prompt path where sudo-rs breaks
       # -- see TROUBLESHOOTING.md. `make doctor` covers that instead.
       - name: Converge (first run)
+        if: steps.scope.outputs.needed == 'true'
         env:
           ANSIBLE_CONFIG: ${{ github.workspace }}/ansible.cfg
           ANSIBLE_FORCE_COLOR: "1"
@@ -80,6 +112,7 @@ jobs:
       # never be trusted to be a no-op on an up-to-date machine.
       - name: Converge (second run, for idempotence)
         id: second
+        if: steps.scope.outputs.needed == 'true'
         env:
           ANSIBLE_CONFIG: ${{ github.workspace }}/ansible.cfg
           # ansible.cfg sets force_color, which wraps the play recap in ANSI
@@ -100,7 +133,7 @@ jobs:
             --become | tee second-run.log
 
       - name: Report idempotence
-        if: always()
+        if: always() && steps.scope.outputs.needed == 'true'
         run: |
           sed -e 's/\x1b\[[0-9;]*m//g' second-run.log > clean.log
           recap=$(grep -E '^localhost .*ok=' clean.log || true)
@@ -127,7 +160,7 @@ jobs:
           fi
 
       - name: Upload the second run log
-        if: always()
+        if: always() && steps.scope.outputs.needed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: apply-second-run-log

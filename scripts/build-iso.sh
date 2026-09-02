@@ -30,7 +30,12 @@ ISO_NAME="ubuntu-${RELEASE}-live-server-amd64.iso"
 ISO_URL="${ISO_URL:-https://releases.ubuntu.com/${RELEASE}/${ISO_NAME}}"
 SUMS_URL="${SUMS_URL:-https://releases.ubuntu.com/${RELEASE}/SHA256SUMS}"
 
-CACHE="${CACHE:-build/cache}"
+# Outside the working tree on purpose. Feature branches are developed in git
+# worktrees, one directory per branch, and build/ is gitignored -- so a
+# per-tree cache means every worktree re-downloads the same 2.8G installer ISO.
+# Packer already caches in ~/.cache/packer for the same reason. Override with
+# CACHE=... for a one-off build against a different ISO.
+CACHE="${CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/workstation/iso}"
 OUT_DIR="${OUT_DIR:-build}"
 VERSION="${VERSION:-dev}"
 OUT_ISO="${OUT_DIR}/workstation-${VERSION}-installer.iso"

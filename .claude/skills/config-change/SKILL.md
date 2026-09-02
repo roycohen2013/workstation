@@ -277,14 +277,41 @@ Verified: repo key, suite and component resolve for resolute; make lint
 passes. No image build.
 ```
 
-Push to the branch already checked out:
+**Never commit to `main`.** Every change goes on its own branch and reaches
+`main` through a pull request, which is what lets several changes be worked on at
+once and what puts CI between a change and the trunk. Branch protection enforces
+this, but do not rely on the rule to catch you.
 
 ```bash
-git push -u origin "$(git branch --show-current)"
+git switch -c "change/<slug>"          # fix/<slug> for repo or CI bugs, not the image
+git add <the specific files>
+git commit                             # subject names the change, body says why
+git push -u origin "change/<slug>"
+gh pr create --fill
+gh pr merge --squash --auto            # lands itself once lint and apply are green
 ```
 
-Never switch branches or push somewhere else without asking first. On a network
-failure retry up to four times with backoff (2s, 4s, 8s, 16s). If the repo has a
-default branch other than this one and no open PR exists for it, open a draft PR.
+`--auto` rather than merging directly: `apply` converges a real machine twice and
+takes twelve to fifteen minutes, so waiting on it interactively wastes the
+session. The PR merges itself when both required checks pass, and stays open with
+a red check if they do not.
+
+One logical change per branch. Squash-merging means the branch becomes a single
+commit on `main`, so if the work uncovered something worth recording -- a bug
+found on the way, an alternative rejected -- it belongs in the squash body, not
+in a commit that will be collapsed.
+
+Working on several changes at once means a worktree each, so the branches do not
+fight over one checkout:
+
+```bash
+git worktree add ../workstation-<slug> -b change/<slug>
+```
+
+`docs/` is generated from `group_vars`, so parallel branches will conflict there.
+`lint-docs` is advisory on pull requests for exactly that reason: regenerate with
+`make docs-config` after merging rather than fighting it on the branch.
+
+On a network failure retry up to four times with backoff (2s, 4s, 8s, 16s).
 
 Then tell the user what landed, what was verified, and what was not.
