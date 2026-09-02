@@ -71,6 +71,17 @@ key-based login. Private keys NEVER belong in this repo or the image.
 
 Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 
+### `workstation_claude_code_enabled`
+
+`true`
+
+Claude Code, the terminal agent. Installed from Anthropic's signed apt
+repository rather than the `curl | bash` native installer: that installer
+puts the binary in ONE user's ~/.local/bin and self-updates in the
+background, which is the wrong shape for an image flashed onto many machines
+and used by whoever logs in. The package is system-wide and updates with the
+rest of the system.
+
 ### `workstation_chrome_enabled`
 
 `true`

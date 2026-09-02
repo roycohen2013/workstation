@@ -32,6 +32,13 @@ workstation_docker_enabled: true
 workstation_flatpak_enabled: true
 # Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 workstation_claude_desktop_enabled: true
+# Claude Code, the terminal agent. Installed from Anthropic's signed apt
+# repository rather than the `curl | bash` native installer: that installer
+# puts the binary in ONE user's ~/.local/bin and self-updates in the
+# background, which is the wrong shape for an image flashed onto many machines
+# and used by whoever logs in. The package is system-wide and updates with the
+# rest of the system.
+workstation_claude_code_enabled: true
 workstation_chrome_enabled: true
 workstation_vscode_enabled: true
 
@@ -339,6 +346,25 @@ apps_apt_repos:
   # Matching their documented layout makes our line identical to theirs, so
   # the two collapse into one instead of conflicting. The key itself is the
   # same either way -- verified byte-identical (sha256) at both paths.
+  - name: claude-code
+    enabled: "{{ workstation_claude_code_enabled }}"
+    key_url: https://downloads.claude.ai/keys/claude-code.asc
+    # Armoured and at the vendor's own path, like claude-desktop above: the key
+    # stays a .asc rather than being dearmoured, and signed-by must match.
+    key_armoured: true
+    key_path: /etc/apt/keyrings/claude-code.asc
+    # Suite is literally "stable", NOT the Ubuntu codename -- templating the
+    # codename here 404s, the same trap as claude-desktop and google-chrome.
+    # "stable" trails releases by about a week and skips ones with major
+    # regressions. The "latest" channel changes BOTH the path and the suite
+    # (.../apt/latest latest main), so switching is a two-part edit.
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/claude-code.asc]
+      https://downloads.claude.ai/claude-code/apt/stable
+      stable main
+    packages:
+      - claude-code
+
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg
