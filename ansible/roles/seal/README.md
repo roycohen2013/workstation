@@ -43,6 +43,12 @@ identities across every laptop and VM built from the same artifact. |
 the very service it would be stopping -- so it lands here instead. Disabling
 (not stopping) keeps the current session alive until shutdown. |
 | Remove SSH host keys | ansible.builtin.shell | False |  |
+| Remove any desktop info stamp | ansible.builtin.file | False | The desktop info stamp names one machine's hostname and IP. It can only be
+written by a logged-in graphical session, which a Packer build does not have,
+so in practice it should never exist here -- removed anyway rather than
+resting on that reasoning, because it lives under a home directory that IS in
+the image, and a wallpaper announcing the build VM's identity on every
+flashed laptop is exactly the class of defect seal exists to prevent. |
 | Clean cloud-init state | ansible.builtin.command | False | --- cloud-init ---------------------------------------------------------------
 cloud-init did its job during the install. Left enabled, it would try to
 reconfigure networking and users on the target machine at every boot. |

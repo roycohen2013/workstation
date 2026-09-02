@@ -56,6 +56,41 @@ personal dotfiles -- roles/dotfiles deliberately pulls those at first login
 rather than baking them in. If chezmoi is later given .bashrc to manage, it
 owns the file and these settings are whatever that repository says.
 
+### `desktop_info_enabled`
+
+`true`
+
+**Hostname and IP on the desktop**
+Which machine am I on, answered without opening a terminal. The text is
+stamped onto the wallpaper rather than drawn by a desktop widget, which is
+how Sysinternals BGInfo has always done it on Windows and how BGINFO4X and
+lbginfo do it on Linux.
+Not conky, though this repo already installs it: conky is an X11 application
+and this desktop is GNOME on Wayland, where it has open upstream bugs -- the
+window not appearing, right-alignment failing, own_window_type=desktop
+vanishing when the desktop is clicked. Not a GNOME Shell extension either:
+extensions break on every GNOME major version, and a wallpaper does not.
+desktop_info_base_wallpaper must stay a PRISTINE source image. The generated
+file is written elsewhere and set as the wallpaper; stamping the current
+wallpaper instead would re-stamp its own output and the text would compound
+on every refresh.
+
+### `desktop_info_base_wallpaper`
+
+`/usr/share/backgrounds/warty-final-ubuntu.png`
+
+### `desktop_info_refresh`
+
+`2min`
+
+### `desktop_info_font`
+
+`/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf`
+
+### `desktop_info_pointsize`
+
+`20`
+
 ### `base_bash_histsize`
 
 `50000`
