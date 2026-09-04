@@ -202,6 +202,15 @@ docs-diff: ## Compare two builds. Usage: make docs-diff FROM=<version> TO=<versi
 .PHONY: lint
 lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell lint-docs ## Run every linter
 
+.PHONY: lint-commits
+lint-commits: ## Check commit messages. Usage: make lint-commits [RANGE=A..B]
+	@# Deliberately NOT part of `lint`: that target runs before a commit exists
+	@# (the config-change skill calls it at verify time), where checking earlier
+	@# commits is pure noise. Defaults to HEAD alone because every commit made
+	@# before this convention was adopted predates it -- history is grandfathered,
+	@# not rewritten. See CONTRIBUTING.md.
+	python3 scripts/lint-commit-msg.py $(if $(RANGE),--range $(RANGE),)
+
 .PHONY: lint-docs
 lint-docs: ## Fail if the committed docs are stale relative to source
 	@# Regenerates everything docs-config produces -- the role READMEs included,

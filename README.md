@@ -106,6 +106,7 @@ make flash DEV=/dev/sdX   write an image to a disk
 make docs       render this build's contents as a browsable HTML report
 make docs-config  regenerate the committed reference docs under docs/
 make lint       run every linter
+make lint-commits  check commit messages against the convention
 ```
 
 ## Knowing what is in an image
@@ -235,7 +236,8 @@ It then walks a fixed path:
    change to a role.
 5. **Makes the edit**, matching the file's existing style.
 6. **Verifies**, then runs `make lint`.
-7. **Commits and pushes**, with a message explaining *why*, not just what.
+7. **Hands off to the `commit` skill**, which adds the changelog entry, writes a
+   Conventional Commits message, and pushes.
 
 **What step 5 is really for.** The expensive mistake in this repo is a name that
 does not exist. Nothing catches it at edit time — `apt install` dies deep inside a
@@ -270,7 +272,9 @@ tells you plainly what it did and did not prove.
 ### By hand
 
 Nothing about the skill is load-bearing — it is a shortcut, not a gate. Edit
-`ansible/group_vars/all.yml` directly, then `make lint`, then commit as usual.
+`ansible/group_vars/all.yml` directly, then `make lint`, then commit following
+[the commit convention](CONTRIBUTING.md#commit-messages) — `make lint-commits`
+checks the result.
 
 Worth knowing if you go this route, because all three lint clean and fail later:
 
@@ -286,6 +290,37 @@ Worth knowing if you go this route, because all three lint clean and fail later:
 Adding a third-party APT repo is data too — name, key URL, repo line, packages.
 Keys are dearmoured into `/etc/apt/keyrings` and referenced with `signed-by`, so
 no vendor key is trusted to sign anything outside its own repo.
+
+## Committing
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),
+and user-facing changes get one line in [`CHANGELOG.md`](CHANGELOG.md):
+
+```
+feat(image): add Tailscale from the upstream apt repository
+fix(iso): stop mangling xorriso's own quoted arguments
+perf(packer): drop default zstd level from 19 to 12
+```
+
+The subject states the outcome, not the technique — `fix: prevent crash on empty
+input`, not `refactor: extract validation helper`. The full rules, including the
+type and scope lists, are in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+The **`commit` skill** does all of this for you — it surveys the diff, decides
+whether the change earns a changelog entry, drafts the message, shows it with the
+exact file list for approval, commits, validates, and pushes. Invoke it explicitly
+with `/commit`, or just say "commit this".
+
+To check messages yourself:
+
+```bash
+make lint-commits                          # HEAD
+make lint-commits RANGE=origin/main..HEAD  # a span
+```
+
+Nothing in CI inspects commit messages — this is a linter you run, not a gate.
+Commits made before the convention was adopted predate it and are not being
+rewritten, which is why the default is `HEAD` alone.
 
 ## Secrets
 
@@ -334,9 +369,15 @@ iso/                         autoinstall seed for the installer ISO
 terraform/artifacts/         image bucket
 terraform/testlab/           throwaway VM for verifying a build
 tests/goss/                  assertions run inside the image during the build
-scripts/                     flash, fetch, publish, build-iso
+scripts/                     flash, fetch, publish, build-iso, lint-commit-msg
 .claude/skills/config-change/  Claude Code skill for making a config change:
                              SKILL.md, scripts/verify-change.sh, evals/
+.claude/skills/commit/       Claude Code skill for committing: changelog entry,
+                             conventional message, staging, validation, push
+.claude/commands/commit.md   /commit, which invokes that skill
+CONTRIBUTING.md              the commit and changelog convention
+CHANGELOG.md                 user-facing changes, newest first
+CLAUDE.md                    what a Claude session needs to know here
 ```
 
 ## Requirements

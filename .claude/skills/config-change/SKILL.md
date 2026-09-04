@@ -261,30 +261,30 @@ lint-clean and the package exists, and that no image was built.
 
 ## Step 7 — Commit and push
 
-Commit only after verification passes. Stage the specific files changed, not `-A`.
+Commit only after verification passes, then **use the `commit` skill** — it owns the
+message format, the changelog, staging, validation and the push. Do not hand-write a
+`git commit` here; a second commit convention living in this file is exactly how the
+two drift apart.
 
-Write a subject line naming the actual change, and a body explaining *why* — which
-source was chosen and what was rejected. Six months later that reasoning is the only
-thing that explains an odd-looking entry.
+Two things to carry into it from the work above:
 
-```
-Add Tailscale from the upstream apt repository
+- **A package added or removed is user-facing**, so it earns a `CHANGELOG.md` entry
+  under `Added`, `Changed` or `Removed`. Scope it `image` — that is what the reader
+  cares about:
 
-Ubuntu's archive package lags upstream by several months, and Tailscale
-expects to self-update against its own repo.
+  ```
+  feat(image): add Tailscale from the upstream apt repository
+  ```
 
-Verified: repo key, suite and component resolve for resolute; make lint
-passes. No image build.
-```
+- **Say what was rejected and why** in the body, briefly. Which source was chosen over
+  which alternative is the only thing that explains an odd-looking entry six months
+  later:
 
-Push to the branch already checked out:
+  ```
+  Ubuntu's archive package lags upstream by months, and Tailscale expects
+  to self-update against its own repo.
+  ```
 
-```bash
-git push -u origin "$(git branch --show-current)"
-```
-
-Never switch branches or push somewhere else without asking first. On a network
-failure retry up to four times with backoff (2s, 4s, 8s, 16s). If the repo has a
-default branch other than this one and no open PR exists for it, open a draft PR.
-
-Then tell the user what landed, what was verified, and what was not.
+The Step 6 verification report goes to the user in chat, not into the commit body. Tell
+them what was verified, what was not, and specifically whether an image was built —
+"verified" must never be heard as "built and booted".

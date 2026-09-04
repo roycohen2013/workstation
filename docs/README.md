@@ -11,7 +11,9 @@ Generated from source by `make docs-config`. CI regenerates these and fails if t
 | [packer.md](packer.md) | Packer build variables |
 | [terraform.md](terraform.md) | Terraform module inputs and outputs |
 | [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | The commit message and changelog convention |
+| [../CHANGELOG.md](../CHANGELOG.md) | User-facing changes, newest first |
 
 The contents of a *built image* are documented separately, in the `docs.html` rendered beside each artifact by `scripts/render-docs.py`.
 
-`aws-s3-setup.md` is hand-written, not generated -- everything else in this table is produced from source by this script.
+`aws-s3-setup.md` and the two root documents are hand-written, not generated -- everything else in this table is produced from source by this script.
