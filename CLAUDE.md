@@ -36,6 +36,32 @@ the expensive failure here is a misspelled package name: nothing catches it at
 edit time, and it surfaces 30–60 minutes into a Packer build. The skill checks
 the thing actually exists before committing.
 
+## Committing
+
+**Use the `commit` skill for every commit. Do not hand-write `git commit`
+messages.** It owns the whole path: the `CHANGELOG.md` entry, the Conventional
+Commits message, staging specific paths, validation, and the push.
+
+The full convention is in [CONTRIBUTING.md](CONTRIBUTING.md); the short version:
+
+- `<type>[(<scope>)][!]: <description>` — types are `feat` `fix` `refactor`
+  `docs` `test` `chore` `ci` `perf`; scopes are `ansible` `packer` `terraform`
+  `iso` `scripts` `docs` `ci` `make` `skill` `goss` `image`.
+- The subject states the outcome, not the technique.
+- 72 characters per line. No trailing period. No emoji. No attribution lines.
+- `CHANGELOG.md` is edited **only** while preparing a commit, never during
+  implementation, and only for user-facing changes.
+- Validate with `make lint-commits` before pushing.
+
+**Branches are squash-merged, so the pull request title becomes the commit on
+`main`.** Give the PR a conventional title too, or the convention stops at the
+branch. Branching, PR and merge mechanics are in
+[docs/git-workflow.md](docs/git-workflow.md).
+
+Commits before `feat: standardize commits on Conventional Commits and a
+changelog` predate this convention and are not being rewritten, which is why
+`make lint-commits` checks `HEAD` alone by default.
+
 ## Verification expectations
 
 Changes to this repo are verified against reality rather than assumed:

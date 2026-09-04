@@ -234,6 +234,8 @@ def main():
              "| [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |\n",
              "| [changing-config.md](changing-config.md) | Adding software and changing settings |\n",
              "| [git-workflow.md](git-workflow.md) | Branches, pull requests and what gates a merge |\n",
+             "| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Commit message and changelog convention |\n",
+             "| [../CHANGELOG.md](../CHANGELOG.md) | User-facing changes, newest first |\n",
              "| [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |\n",
              "| [image-contents.md](image-contents.md) | Knowing what is inside a built image |\n",
              "| [publishing.md](publishing.md) | Uploading artifacts and moving the channel |\n",
