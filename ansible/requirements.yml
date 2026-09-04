@@ -8,9 +8,16 @@ collections:
   # balena_etcher_version and dev_mise_runtimes are bumped on purpose rather
   # than left to float. Only this collection is capped: it is the one with a
   # confirmed incident behind it, not a guess applied for symmetry -- there is
-  # no known break in ansible.posix, and 2.1.0 (already newer than a
-  # precautionary "<2.0.0" would have allowed) works fine here.
+  # no known break in ansible.posix, so it is floored but not capped.
   - name: community.general   # dconf, flatpak, snap, timezone
     version: ">=8.0.0,<12.0.0"
+  # Floor raised from ">=1.5.0" to force an upgrade off 2.1.0, whose sysctl
+  # module imports to_native from ansible.module_utils._text -- a path
+  # ansible-core 2.20 deprecates and 2.24 removes, so every `Apply sysctl
+  # settings` task printed a deprecation warning from third-party code. 2.2.2
+  # imports it from ansible.module_utils.common.text.converters instead;
+  # checked against upstream's own source at that tag, not inferred from the
+  # changelog. The floor is what does the work: 2.1.0 satisfied ">=1.5.0", so
+  # `make deps` reported "Nothing to do" and never upgraded.
   - name: ansible.posix       # mount, sysctl, authorized_key
-    version: ">=1.5.0"
+    version: ">=2.2.0"

@@ -16,10 +16,34 @@ VERSION     ?= $(shell date -u +%Y.%m.%d)-$(GIT_SHA)$(GIT_DIRTY)
 
 BUILD_DIR   ?= build
 IMAGE_NAME  ?= workstation
-ARTIFACT    := $(BUILD_DIR)/$(IMAGE_NAME)-$(VERSION)
+# The directory a build's artifacts land in -- not an artifact itself.
+# See CONTEXT.md: an artifact is one published file.
+ARTIFACT_DIR := $(BUILD_DIR)/$(IMAGE_NAME)-$(VERSION)
 PLAYBOOK    := ansible/site.yml
 
 export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
+
+# Ubuntu 26.04 points /usr/bin/sudo at sudo-rs, the Rust reimplementation.
+# It treats a caller-supplied -p prompt as untrusted text: instead of showing
+# it, it echoes it inside a "[sudo: ...]" annotation and then prompts with its
+# own generic "Password:". Ansible's become plugin waits for the exact
+# key-tagged prompt it asked for, never sees it, and every run dies with
+# "Timed out waiting for become success or become password prompt" -- with a
+# correct password, and with sudo sitting there ready to accept it.
+#
+# Confirmed by running the two binaries side by side with the same -p string:
+#   sudo-rs      [sudo: [sudo via ansible, key=X] password:] Password:
+#   classic sudo [sudo via ansible, key=X] password:
+# and then by pointing become_exe at the classic binary and feeding Ansible a
+# deliberately wrong password: it changes from timing out without ever
+# submitting anything to submitting it and getting "Sorry, try again" back,
+# which is prompt detection working.
+#
+# Ubuntu keeps the classic implementation installed alongside as sudo.ws. On
+# any machine without it this expands to nothing and the default sudo is used,
+# so this stays a no-op everywhere the problem does not exist.
+SUDO_WS    := $(shell command -v sudo.ws 2>/dev/null)
+BECOME_EXE := $(if $(SUDO_WS),-e ansible_become_exe=$(SUDO_WS),)
 
 .PHONY: help
 help: ## Show this help
@@ -31,6 +55,10 @@ help: ## Show this help
 	@echo "  Version for this build: $(VERSION)"
 
 # --- Dependencies -------------------------------------------------------------
+
+.PHONY: doctor
+doctor: ## Check this machine still matches what the repo assumes
+	@scripts/doctor.sh
 
 .PHONY: deps
 deps: ## Install Ansible collections
@@ -79,7 +107,7 @@ init: ## Install Packer plugins
 	packer init packer/
 
 .PHONY: image
-image: check-tools init deps ## Build the golden image (qcow2 + raw)
+image: check-tools init deps ## Build the image (qcow2 + raw)
 	# -force: the qemu builder refuses to run if its output directory already
 	# exists, and a build that dies partway (crash, Ctrl-C, a machine reboot
 	# mid-compression) always leaves one behind. Without this, every retry
@@ -95,8 +123,8 @@ image: check-tools init deps ## Build the golden image (qcow2 + raw)
 	  $(ARGS) \
 	  packer/
 	@echo
-	@echo "Built $(ARTIFACT).{qcow2,raw}.zst"
-	@ls -lh $(ARTIFACT)/ 2>/dev/null || true
+	@echo "Built $(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).{qcow2,raw}.zst"
+	@ls -lh $(ARTIFACT_DIR)/ 2>/dev/null || true
 
 .PHONY: image-debug
 image-debug: check-tools init deps ## Build with the installer visible, for debugging
@@ -111,12 +139,12 @@ iso: ## Build the unattended installer ISO
 
 .PHONY: test
 test: ## Boot the built image in libvirt and check it comes up
-	@test -f "$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	@test -f "$(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).qcow2" \
 	  || { echo "No image for $(VERSION). Run 'make image' first."; exit 1; }
 	terraform -chdir=terraform/testlab init -input=false
 	terraform -chdir=terraform/testlab apply -auto-approve \
-	  -var "image_path=$(CURDIR)/$(ARTIFACT)/$(IMAGE_NAME)-$(VERSION).qcow2" \
-	  -var "version=$(VERSION)"
+	  -var "image_path=$(CURDIR)/$(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).qcow2" \
+	  -var "image_version=$(VERSION)"
 	@echo
 	@echo "VM booted and took a DHCP lease:"
 	@terraform -chdir=terraform/testlab output ip_address
@@ -126,12 +154,12 @@ test: ## Boot the built image in libvirt and check it comes up
 .PHONY: test-down
 test-down: ## Destroy the test VM
 	terraform -chdir=terraform/testlab destroy -auto-approve \
-	  -var "image_path=/dev/null" -var "version=$(VERSION)"
+	  -var "image_path=/dev/null" -var "image_version=$(VERSION)"
 
 # --- Distribute ---------------------------------------------------------------
 
 .PHONY: publish
-publish: ## Upload the built image and move the channel pointer
+publish: ## Upload the built image and move the channel
 	VERSION=$(VERSION) scripts/publish-image.sh
 
 .PHONY: fetch
@@ -151,6 +179,7 @@ apply: deps ## Converge THIS machine to the config (no reimage)
 	  -i localhost, -c local \
 	  -e workstation_phase=live \
 	  -e workstation_image_version=$(VERSION) \
+	  $(BECOME_EXE) \
 	  --ask-become-pass $(ARGS)
 
 .PHONY: apply-check
@@ -158,6 +187,7 @@ apply-check: deps ## Show what `make apply` would change, without changing it
 	ansible-playbook $(PLAYBOOK) \
 	  -i localhost, -c local \
 	  -e workstation_phase=live \
+	  $(BECOME_EXE) \
 	  --check --diff --ask-become-pass $(ARGS)
 
 # --- Documentation -----------------------------------------------------------
@@ -168,13 +198,13 @@ verify-repos: ## Check every third-party apt repo declared in group_vars
 
 .PHONY: docs
 docs: ## Render the built image's contents as HTML and show where it is
-	@test -f "$(ARTIFACT)/workstation-manifest.json" \
+	@test -f "$(ARTIFACT_DIR)/workstation-manifest.json" \
 	  || { echo "No manifest for $(VERSION). Run 'make image' first."; exit 1; }
 	python3 scripts/render-docs.py \
-	  --manifest "$(ARTIFACT)/workstation-manifest.json" \
-	  --declared "$(ARTIFACT)/workstation-declared.json" \
-	  -o "$(ARTIFACT)/docs.html"
-	@echo "Open: $(ARTIFACT)/docs.html"
+	  --manifest "$(ARTIFACT_DIR)/workstation-manifest.json" \
+	  --declared "$(ARTIFACT_DIR)/workstation-declared.json" \
+	  -o "$(ARTIFACT_DIR)/docs.html"
+	@echo "Open: $(ARTIFACT_DIR)/docs.html"
 
 .PHONY: docs-config
 docs-config: ## Regenerate the committed reference docs from source
@@ -236,8 +266,22 @@ lint-packer:
 	packer validate -syntax-only packer/
 
 .PHONY: lint-terraform
+# fmt alone only checks layout. CI has always run `validate` as well and local
+# lint did not, so `make lint` reported clean while the testlab module could not
+# even initialise: it declared a variable named "version", which Terraform
+# reserves, and its provider constraint "~> 0.8" let the breaking 0.9 schema in.
+# Both were invisible to fmt, so `make test` had never been able to work.
+#
+# Validating costs a provider download on a cold run and needs network, which is
+# presumably why it was left out. That is a poor trade against a linter that
+# passes on a module which cannot start.
 lint-terraform:
 	terraform fmt -check -recursive terraform/
+	@for dir in terraform/*/; do \
+	  echo "--- $$dir"; \
+	  terraform -chdir="$$dir" init -backend=false -input=false >/dev/null || exit 1; \
+	  terraform -chdir="$$dir" validate || exit 1; \
+	done
 
 .PHONY: lint-shell
 lint-shell:

@@ -28,10 +28,22 @@
 # Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
 # signed-by, rather than added to the deprecated global trusted keyring where
 # any one vendor key would be trusted to sign any package.
+# Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
+# file against what it fetches and reports ok when they match -- but only if
+# the file is still there. Deleting it made this task, and the dearmour and
+# apt_repository tasks below it, report changed on every single converge; the
+# CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
+# also survives a reboot. This is public key material, a few KB per vendor.
+- name: Ensure the key cache exists
+  ansible.builtin.file:
+    path: /var/cache/workstation/keys
+    state: directory
+    mode: "0755"
+
 - name: Fetch repository signing keys
   ansible.builtin.get_url:
     url: "{{ item.key_url }}"
-    dest: "/tmp/{{ item.name }}.asc"
+    dest: "/var/cache/workstation/keys/{{ item.name }}.asc"
     mode: "0644"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
@@ -45,15 +57,16 @@
 # sources.list.d entry naming a keyring path of their choosing -- if that file
 # does not exist, every later apt update fails with NO_PUBKEY. Matching the
 # vendor's documented layout keeps apt working whichever entry wins.
-#   docker/hashicorp: defaults (dearmoured, our path)
+#   docker:           defaults (dearmoured, our path)
 #   claude-desktop:   armoured, vendor path
 #   1password:        dearmoured, vendor path
+#   hashicorp:        dearmoured, vendor path -- see the note in group_vars
 - name: Install repository signing keys (dearmoured)
   ansible.builtin.command:
     cmd: >-
       gpg --batch --yes --dearmor
       -o {{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}
-      /tmp/{{ item.name }}.asc
+      /var/cache/workstation/keys/{{ item.name }}.asc
     creates: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
@@ -62,7 +75,7 @@
 
 - name: Install repository signing keys (armoured, verbatim)
   ansible.builtin.copy:
-    src: "/tmp/{{ item.name }}.asc"
+    src: "/var/cache/workstation/keys/{{ item.name }}.asc"
     dest: "{{ item.key_path }}"
     remote_src: true
     mode: "0644"
@@ -79,6 +92,24 @@
   loop_control:
     label: "{{ item.name }}"
 
+# 1Password's postinst writes its own deb822 source at
+# /etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
+# debsig keyring too -- and then does:
+#
+#     sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
+#
+# which comments out the file apt_repository manages here. Our next converge
+# uncomments it, their next package operation comments it again, and the CI
+# idempotence pass reported "Add repositories" changed forever because of it.
+#
+# Our entry is only needed to bootstrap: once their .sources exists, it is
+# authoritative and ours is redundant. So stop declaring it, and remove the
+# commented-out leftover so exactly one declaration of the origin remains.
+- name: Check whether 1Password now manages its own apt source
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/1password.sources
+  register: apps_1password_own_source
+
 - name: Add repositories
   ansible.builtin.apt_repository:
     repo: "{{ item.repo }}"
@@ -91,6 +122,13 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+  when: not (item.name == '1password' and apps_1password_own_source.stat.exists)
+
+- name: Remove our redundant 1Password apt source
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/1password.list
+    state: absent
+  when: apps_1password_own_source.stat.exists
 
 # 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 # addition to apt verifying the repository -- so it has to be in place before
@@ -130,7 +168,7 @@
     cmd: >-
       gpg --batch --yes --dearmor
       -o /usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg
-      /tmp/1password.asc
+      /var/cache/workstation/keys/1password.asc
     creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
   when: workstation_1password_enabled | bool
 
@@ -155,14 +193,6 @@
     state: present
   when: apps_repos_enabled | length > 0
 
-- name: Remove downloaded key material
-  ansible.builtin.file:
-    path: "/tmp/{{ item.name }}.asc"
-    state: absent
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-
 # Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 # It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 # the latter -- so joining the group is required even where /dev/kvm alone is
@@ -184,6 +214,20 @@
 # `apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
 # is exactly that -- apt, not raw dpkg, so dependencies resolve against the
 # configured archive automatically.
+# Gated on what is already installed. The .deb is ~150MB and is deleted after
+# installing, so without this it was re-downloaded on every converge and this
+# task, the install and the cleanup all reported changed forever -- which is
+# what the CI idempotence pass reports. Deleting it is still right: keeping
+# 150MB of installer in the image to gain idempotence would be a bad trade,
+# so the version check provides it instead.
+- name: Check the installed BalenaEtcher version
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f='${Version}' balena-etcher
+  register: apps_etcher_installed
+  changed_when: false
+  failed_when: false
+  when: workstation_balena_etcher_enabled | bool
+
 - name: Download BalenaEtcher
   ansible.builtin.get_url:
     url: "{{ balena_etcher_deb_url }}"
@@ -192,6 +236,7 @@
     mode: "0644"
   when:
     - workstation_balena_etcher_enabled | bool
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
     - workstation_desktop_enabled | bool
 
 - name: Install BalenaEtcher
@@ -200,6 +245,7 @@
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
 
 # BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 # that have nothing to do with security here -- a setuid helper with the
@@ -293,6 +339,7 @@
     path: "/tmp/balena-etcher_{{ balena_etcher_version }}_amd64.deb"
     state: absent
   when:
+    - apps_etcher_installed.stdout | default('') != balena_etcher_version
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
 
@@ -308,6 +355,85 @@
   when: apps_snap | length > 0
 
 # --- Flatpaks -----------------------------------------------------------------
+# --- Nimbalyst ----------------------------------------------------------------
+# Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
+# below, the file is kept in place rather than downloaded and deleted: get_url
+# with a checksum re-verifies an existing file and reports ok, so a converge
+# does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
+# why the CI idempotence pass reports changes on every run.
+- name: Install the AppImage runtime dependency
+  ansible.builtin.apt:
+    name: libfuse2t64
+    state: present
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Create the Nimbalyst directory
+  ansible.builtin.file:
+    path: /opt/nimbalyst
+    state: directory
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Install Nimbalyst
+  ansible.builtin.get_url:
+    url: "{{ nimbalyst_appimage_url }}"
+    dest: /opt/nimbalyst/Nimbalyst.AppImage
+    checksum: "sha512:{{ nimbalyst_appimage_sha512 }}"
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
+# The AppImage carries its own icon, so it is taken from there rather than
+# committed as a binary blob. Extracting a single path costs 36KB, not the
+# ~1GB a full --appimage-extract would; guarded on the INSTALLED icon rather
+# than on the extraction directory, so cleaning up the temporary tree does not
+# make this re-run forever.
+- name: Extract and install the Nimbalyst icon
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      cd "$tmp"
+      /opt/nimbalyst/Nimbalyst.AppImage --appimage-extract \
+        usr/share/icons/hicolor/512x512/apps/nimbalyst.png >/dev/null
+      install -D -m 0644 \
+        squashfs-root/usr/share/icons/hicolor/512x512/apps/nimbalyst.png \
+        /usr/share/icons/hicolor/512x512/apps/nimbalyst.png
+    creates: /usr/share/icons/hicolor/512x512/apps/nimbalyst.png
+  when: workstation_nimbalyst_enabled | bool
+
+# Mirrors the entry inside the AppImage, with an absolute Exec. --no-sandbox is
+# not this repo being cautious: it is what the vendor's own desktop entry ships,
+# and Ubuntu sets kernel.apparmor_restrict_unprivileged_userns=1, which stops an
+# unpackaged Electron app from creating its sandbox at all.
+- name: Install the Nimbalyst desktop entry
+  ansible.builtin.copy:
+    content: |
+      [Desktop Entry]
+      Name=Nimbalyst
+      Comment=Visual workspace for coding agents
+      Exec=/opt/nimbalyst/Nimbalyst.AppImage --no-sandbox %U
+      Icon=nimbalyst
+      Terminal=false
+      Type=Application
+      StartupWMClass=Nimbalyst
+      MimeType=text/markdown;x-scheme-handler/nimbalyst;
+      Categories=Utility;Development;
+    dest: /usr/share/applications/nimbalyst.desktop
+    mode: "0644"
+  when: workstation_nimbalyst_enabled | bool
+
+- name: Link Nimbalyst onto PATH
+  ansible.builtin.copy:
+    content: |
+      #!/bin/sh
+      # Managed by Ansible (roles/apps). See the comment above this block in
+      # ansible/roles/apps/tasks/main.yml for why --no-sandbox is here.
+      exec /opt/nimbalyst/Nimbalyst.AppImage --no-sandbox "$@"
+    dest: /usr/local/bin/nimbalyst
+    mode: "0755"
+  when: workstation_nimbalyst_enabled | bool
+
 - name: Install flatpaks
   community.general.flatpak:
     name: "{{ item }}"

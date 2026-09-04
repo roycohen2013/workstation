@@ -1,5 +1,9 @@
 # Contributing
 
+Branching, pull requests, worktrees and what gates a merge are in
+[docs/git-workflow.md](docs/git-workflow.md). This file covers what goes *in* a
+commit message, and how the changelog is kept.
+
 ## Commit messages
 
 Every commit follows [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):
@@ -47,6 +51,15 @@ removed — since that is the scope a reader cares about most here.
   Say so explicitly.
 - Closing references go on their own footer line: `Fixes #123`. Use `Refs #123` when the
   commit advances an issue without finishing it.
+
+### Pull request titles
+
+Branches are squash-merged, so **the pull request title becomes the commit on `main`**.
+The title is therefore the message that has to follow this convention — the commits on
+the branch are collapsed. `gh pr create --fill` derives the title from a single-commit
+branch, which carries a conventional subject through unchanged; a branch with several
+commits takes its title from the first one, so check it before merging. The squash body
+is the commit body once it lands, and follows the same rules.
 
 ### Checking
 
@@ -97,10 +110,12 @@ here is load-bearing:
 ## Linting
 
 ```bash
+make doctor         # does this machine still match what the repo assumes?
 make lint           # yaml, ansible, packer, terraform, shell, docs
 make lint-commits   # commit messages (separate: lint runs before a commit exists)
 ```
 
-`make lint-docs` regenerates every committed doc and fails if anything moved, so
-`docs/` cannot silently drift from the source it describes. If you change
+`make lint-docs` regenerates every committed doc and fails if anything moved. It is
+advisory on pull requests and enforcing on `main`, so parallel branches do not have to
+fight the generated files — regenerate after merging. If you change
 `scripts/gen-config-docs.py`, run `make docs-config` and commit the result.

@@ -2,7 +2,7 @@
 # Laptop hardware support.
 #
 # These packages are installed into EVERY image, VM builds included, because
-# the golden image is meant to be flashable onto metal -- a VM-built image
+# the image is meant to be flashable onto metal -- a VM-built image
 # missing linux-firmware is a laptop with no Wi-Fi. What is conditional is
 # whether the power and thermal *services* run, which firstboot decides on the
 # target machine rather than here.
@@ -14,7 +14,7 @@
 
 - name: Detect virtualisation
   ansible.builtin.set_fact:
-    hardware_is_virtual: "{{ ansible_virtualization_role | default('host') == 'guest' }}"
+    hardware_is_virtual: "{{ ansible_facts['virtualization_role'] | default('host') == 'guest' }}"
 
 - name: Set power management service state
   ansible.builtin.systemd:

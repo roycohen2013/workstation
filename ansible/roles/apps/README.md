@@ -43,9 +43,16 @@ Description: Third-party APT repositories, snaps and flatpaks, all declared as d
 to a string. selectattr() would truth-test that string, and a non-empty
 "False" is truthy -- silently enabling a repository that is switched off.
 An explicit `| bool` is the only reliable test here. |
-| Fetch repository signing keys | ansible.builtin.get_url | False | Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
+| Ensure the key cache exists | ansible.builtin.file | False | Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
 signed-by, rather than added to the deprecated global trusted keyring where
-any one vendor key would be trusted to sign any package. |
+any one vendor key would be trusted to sign any package.
+Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
+file against what it fetches and reports ok when they match -- but only if
+the file is still there. Deleting it made this task, and the dearmour and
+apt_repository tasks below it, report changed on every single converge; the
+CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
+also survives a reboot. This is public key material, a few KB per vendor. |
+| Fetch repository signing keys | ansible.builtin.get_url | False |  |
 | Install repository signing keys (dearmoured) | ansible.builtin.command | True | Key handling is two independent choices, because vendors differ on both:
 key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
 key_armoured whether to copy the .asc verbatim or dearmour it first
@@ -54,12 +61,27 @@ It matters because several vendors' packages register their own
 sources.list.d entry naming a keyring path of their choosing -- if that file
 does not exist, every later apt update fails with NO_PUBKEY. Matching the
 vendor's documented layout keeps apt working whichever entry wins.
-docker/hashicorp: defaults (dearmoured, our path)
+docker:           defaults (dearmoured, our path)
 claude-desktop:   armoured, vendor path
-1password:        dearmoured, vendor path |
+1password:        dearmoured, vendor path
+hashicorp:        dearmoured, vendor path -- see the note in group_vars |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
-| Add repositories | ansible.builtin.apt_repository | False |  |
+| Check whether 1Password now manages its own apt source | ansible.builtin.stat | False | 1Password's postinst writes its own deb822 source at
+/etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
+debsig keyring too -- and then does:
+
+sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
+
+which comments out the file apt_repository manages here. Our next converge
+uncomments it, their next package operation comments it again, and the CI
+idempotence pass reported "Add repositories" changed forever because of it.
+
+Our entry is only needed to bootstrap: once their .sources exists, it is
+authoritative and ours is redundant. So stop declaring it, and remove the
+commented-out leftover so exactly one declaration of the origin remains. |
+| Add repositories | ansible.builtin.apt_repository | True |  |
+| Remove our redundant 1Password apt source | ansible.builtin.file | True |  |
 | Create 1Password debsig directories | ansible.builtin.file | True | 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 addition to apt verifying the repository -- so it has to be in place before
 the package installs, not after.
@@ -77,7 +99,6 @@ If its version wins and names a keyring we never created, every later apt
 update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
 that, so it has to exist BEFORE the package installs. |
 | Install packages from third-party repositories | ansible.builtin.apt | True |  |
-| Remove downloaded key material | ansible.builtin.file | False |  |
 | Add the workstation user to the kvm group for Cowork | ansible.builtin.user | True | Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 the latter -- so joining the group is required even where /dev/kvm alone is
@@ -86,12 +107,19 @@ already accessible.
 This lives here, not in workstation_user_groups, because roles/base creates
 the user long before these packages exist: the kvm group is created by the
 qemu recommends pulled in just above, so joining it any earlier fails. |
-| Download BalenaEtcher | ansible.builtin.get_url | True | --- BalenaEtcher ---------------------------------------------------------
+| Check the installed BalenaEtcher version | ansible.builtin.command | True | --- BalenaEtcher ---------------------------------------------------------
 No apt repository exists in current vendor docs -- only a versioned .deb
 from GitHub releases, installed the way the vendor itself documents:
 `apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
 is exactly that -- apt, not raw dpkg, so dependencies resolve against the
-configured archive automatically. |
+configured archive automatically.
+Gated on what is already installed. The .deb is ~150MB and is deleted after
+installing, so without this it was re-downloaded on every converge and this
+task, the install and the cleanup all reported changed forever -- which is
+what the CI idempotence pass reports. Deleting it is still right: keeping
+150MB of installer in the image to gain idempotence would be a bad trade,
+so the version check provides it instead. |
+| Download BalenaEtcher | ansible.builtin.get_url | True |  |
 | Install BalenaEtcher | ansible.builtin.apt | True |  |
 | Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 that have nothing to do with security here -- a setuid helper with the
@@ -113,7 +141,26 @@ skip the wrapper instead of failing loudly. |
 | Install the --no-sandbox wrapper in its place | ansible.builtin.copy | True |  |
 | Remove the downloaded BalenaEtcher package | ansible.builtin.file | True |  |
 | Install snaps | community.general.snap | True | --- Snaps -------------------------------------------------------------------- |
-| Install flatpaks | community.general.flatpak | True | --- Flatpaks ----------------------------------------------------------------- |
+| Install the AppImage runtime dependency | ansible.builtin.apt | True | --- Flatpaks -----------------------------------------------------------------
+--- Nimbalyst ----------------------------------------------------------------
+Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
+below, the file is kept in place rather than downloaded and deleted: get_url
+with a checksum re-verifies an existing file and reports ok, so a converge
+does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
+why the CI idempotence pass reports changes on every run. |
+| Create the Nimbalyst directory | ansible.builtin.file | True |  |
+| Install Nimbalyst | ansible.builtin.get_url | True |  |
+| Extract and install the Nimbalyst icon | ansible.builtin.shell | True | The AppImage carries its own icon, so it is taken from there rather than
+committed as a binary blob. Extracting a single path costs 36KB, not the
+~1GB a full --appimage-extract would; guarded on the INSTALLED icon rather
+than on the extraction directory, so cleaning up the temporary tree does not
+make this re-run forever. |
+| Install the Nimbalyst desktop entry | ansible.builtin.copy | True | Mirrors the entry inside the AppImage, with an absolute Exec. --no-sandbox is
+not this repo being cautious: it is what the vendor's own desktop entry ships,
+and Ubuntu sets kernel.apparmor_restrict_unprivileged_userns=1, which stops an
+unpackaged Electron app from creating its sandbox at all. |
+| Link Nimbalyst onto PATH | ansible.builtin.copy | True |  |
+| Install flatpaks | community.general.flatpak | True |  |
 
 
 

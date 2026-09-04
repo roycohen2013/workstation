@@ -3,7 +3,13 @@ variable "image_path" {
   description = "Absolute path to the qcow2 produced by `make image`."
 }
 
-variable "version" {
+# NOT "version": Terraform reserves that name for its special meaning inside
+# module blocks, and a module that declares it cannot even initialise --
+# `terraform init` fails before validate or apply is reached, so `make test`
+# could never have worked. Local `make lint` did not catch it because
+# lint-terraform only runs `fmt -check`; CI runs `validate`, which is what
+# found it.
+variable "image_version" {
   type        = string
   default     = "dev"
   description = "Build version, used to name the test volume."

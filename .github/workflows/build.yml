@@ -46,6 +46,9 @@ jobs:
           sudo chmod 666 /dev/kvm
           kvm-ok || true
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -55,7 +58,7 @@ jobs:
 
       - uses: hashicorp/setup-packer@main
         with:
-          version: "1.14.2"
+          version: ${{ env.PACKER_VERSION }}
 
       - name: Compute version
         id: version

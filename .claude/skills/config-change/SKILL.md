@@ -64,7 +64,7 @@ Two placements deserve a second thought:
   `apps_apt_base`. Listing them separately means apt tries to install them before the
   repo exists.
 - **`hardware_packages` installs into every image**, VM builds included. That is
-  deliberate — the golden image gets flashed onto metal, and a VM-built image missing
+  deliberate — the image gets flashed onto metal, and a VM-built image missing
   `linux-firmware` is a laptop with no Wi-Fi. Don't "optimise" it away.
 
 ## Step 2 — Trace what else the change touches
@@ -288,3 +288,49 @@ Two things to carry into it from the work above:
 The Step 6 verification report goes to the user in chat, not into the commit body. Tell
 them what was verified, what was not, and specifically whether an image was built —
 "verified" must never be heard as "built and booted".
+
+### Where it goes
+
+**Never commit to `main`.** Every change goes on its own branch and reaches
+`main` through a pull request, which is what lets several changes be worked on at
+once and what puts CI between a change and the trunk. Branch protection enforces
+this, but do not rely on the rule to catch you.
+
+```bash
+git switch -c "change/<slug>"          # fix/<slug> for repo or CI bugs, not the image
+# then hand off to the `commit` skill: it stages the specific files, writes the
+# conventional message, updates CHANGELOG.md and pushes
+gh pr create --fill
+gh pr merge --squash --auto            # lands itself once lint and apply are green
+```
+
+**The PR title becomes the commit on `main`,** because branches are squash-merged.
+`--fill` takes that title from the branch's single commit, so a conventional commit
+subject carries through by itself — but check it, since a branch with several commits
+gets a title from the first one only.
+
+`--auto` rather than merging directly: `apply` converges a real machine twice and
+takes twelve to fifteen minutes, so waiting on it interactively wastes the
+session. The PR merges itself when both required checks pass, and stays open with
+a red check if they do not.
+
+One logical change per branch. Squash-merging means the branch becomes a single
+commit on `main`, so if the work uncovered something worth recording -- a bug
+found on the way, an alternative rejected -- it belongs in the squash body, not
+in a commit that will be collapsed. Keep that body to the convention too: the
+squash body is the commit body once it lands.
+
+Working on several changes at once means a worktree each, so the branches do not
+fight over one checkout:
+
+```bash
+git worktree add ../workstation-<slug> -b change/<slug>
+```
+
+`docs/` is generated from `group_vars`, so parallel branches will conflict there.
+`lint-docs` is advisory on pull requests for exactly that reason: regenerate with
+`make docs-config` after merging rather than fighting it on the branch.
+
+On a network failure retry up to four times with backoff (2s, 4s, 8s, 16s).
+
+Then tell the user what landed, what was verified, and what was not.

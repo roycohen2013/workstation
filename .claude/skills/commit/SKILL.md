@@ -198,18 +198,31 @@ make lint-commits
 Amending is correct here — the commit has not been pushed yet, so nothing downstream
 depends on it.
 
-## Step 6 — Push, and open a PR if one is needed
+## Step 6 — Push, and open a PR
+
+**Never commit or push to `main`.** Every change reaches trunk through a pull request
+that CI has passed — see [docs/git-workflow.md](../../../docs/git-workflow.md). If the
+work started on `main`, move it to a branch before pushing: `change/<slug>` for anything
+that alters the image, `fix/<slug>` for repo and CI bugs.
 
 ```bash
 git push -u origin "$(git branch --show-current)"
+gh pr create --fill
 ```
 
 Never switch branches or push somewhere else without asking. On a network failure retry
 up to four times with backoff (2s, 4s, 8s, 16s).
 
-If the repo's default branch is not the one checked out and no **open** PR exists for
-this branch, open a draft PR. A merged or closed PR does not count — that work is
-finished and cannot track new commits.
+**The PR title becomes the commit on `main`,** because branches are squash-merged. So
+the title has to satisfy this convention, not just the commits on the branch. `--fill`
+takes it from a single-commit branch, carrying the conventional subject through
+unchanged; a branch with several commits takes its title from the first one, so check
+and correct it. The squash body is the commit body once it lands, and follows the same
+rules.
+
+If a PR already exists for this branch, the push updates it — do not open a second. A
+merged or closed PR does not count as existing: that work is finished and cannot track
+new commits.
 
 Then tell the user what landed: the subject line, whether a changelog entry was added or
 deliberately skipped and why, what was verified, and anything left uncommitted in the

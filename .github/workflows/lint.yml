@@ -4,9 +4,13 @@ name: lint
 # Runs on every push. Deliberately does NOT build an image: a full build takes
 # 30-60 minutes and pushes several GB to object storage, which is not a
 # reasonable thing to do on every commit. See build.yml.
+# Trunk pushes and PRs only. This used to be branches: ["**"] alongside
+# pull_request, which ran the whole suite twice for every PR from a branch in
+# this repository -- invisible while everything was pushed straight to trunk,
+# wasteful the moment branches exist.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -45,9 +49,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - uses: hashicorp/setup-packer@main
         with:
-          version: "1.14.2"
+          version: ${{ env.PACKER_VERSION }}
 
       - name: Format check
         run: packer fmt -check -diff packer/
@@ -62,9 +69,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - uses: hashicorp/setup-terraform@v3
         with:
-          terraform_version: "1.13.3"
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
 
       - name: Format check
         run: terraform fmt -check -recursive terraform/
@@ -88,18 +98,45 @@ jobs:
         with:
           python-version: "3.12"
 
+      # terraform-docs formats its tables slightly differently between
+      # releases, and lint-docs fails the moment regenerated output stops
+      # matching what is committed -- so CI and the image must run the SAME
+      # version. Both the version and the checksum are read out of
+      # group_vars rather than repeated here: a second copy of the pin would
+      # eventually disagree with the first, and the failure would look like
+      # stale docs rather than a version skew.
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - name: Install doc tooling
-        run: pip install --quiet docsible
+        run: |
+          pip install --quiet docsible
+          ver=$(sed -n 's/^dev_terraform_docs_version: *"\(.*\)"/\1/p' ansible/group_vars/all.yml)
+          sha=$(sed -n 's/^dev_terraform_docs_sha256: *//p' ansible/group_vars/all.yml)
+          test -n "$ver" -a -n "$sha" || { echo "could not read the terraform-docs pin from group_vars"; exit 1; }
+          echo "terraform-docs v$ver"
+          curl -fsSL -o tfd.tar.gz \
+            "https://github.com/terraform-docs/terraform-docs/releases/download/v${ver}/terraform-docs-v${ver}-linux-amd64.tar.gz"
+          echo "${sha}  tfd.tar.gz" | sha256sum -c -
+          tar xzf tfd.tar.gz terraform-docs
+          sudo install -m 0755 terraform-docs /usr/local/bin/terraform-docs
+          rm -f tfd.tar.gz terraform-docs
 
       - uses: hashicorp/setup-packer@main
         with:
-          version: "1.14.2"
+          version: ${{ env.PACKER_VERSION }}
 
       # Regenerates every committed doc and fails if anything moved. This is
       # what stops docs/ being decorative -- without it nothing would ever
       # notice the reference drifting away from the code it describes.
+      # Advisory on a pull request, enforcing on trunk. docs/ is generated from
+      # group_vars, so two branches that both touch a variable conflict twice --
+      # once in the real config and once in its derived output. Blocking a PR on
+      # that would make parallel work painful for a file nobody edits by hand;
+      # trunk stays authoritative, which is what the check exists for.
       - name: Documentation is up to date
         run: make lint-docs
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
 
   shell:
     runs-on: ubuntu-latest

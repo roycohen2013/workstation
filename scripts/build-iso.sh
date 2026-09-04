@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Remaster the Ubuntu live-server ISO into an unattended installer.
 #
-# Complements the golden image rather than replacing it:
-#   golden image -> instant VM, or dd onto a disk you control
+# Complements the image rather than replacing it:
+#   image        -> instant VM, or dd onto a disk you control
 #   this ISO     -> a clean install on hardware whose disk layout you do not
 #                   know in advance, letting the real installer handle
 #                   partitioning, drivers and firmware
@@ -10,12 +10,32 @@
 # Both end up running the same ansible/site.yml, so they cannot drift.
 set -euo pipefail
 
-RELEASE="${RELEASE:-26.04}"
+# The Ubuntu release is written down once, in packer/variables.pkr.hcl, and
+# read from there rather than copied here. Two copies drift: the ISO built by
+# this script and the image built by Packer would silently target different
+# releases, and nothing downstream would notice until something built against
+# the wrong suite. Parsed rather than sourced because that file is HCL; if the
+# parse ever stops working the script stops with it instead of guessing.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ -z "${RELEASE:-}" ]; then
+    RELEASE="$(sed -n '/variable "ubuntu_release"/,/^}/ s/.*default *= *"\([^"]*\)".*/\1/p' \
+        "${REPO_ROOT}/packer/variables.pkr.hcl")"
+fi
+if [ -z "$RELEASE" ]; then
+    echo "error: could not read ubuntu_release from packer/variables.pkr.hcl" >&2
+    echo "       set RELEASE=<version> to override, and fix the parse in this script" >&2
+    exit 1
+fi
 ISO_NAME="ubuntu-${RELEASE}-live-server-amd64.iso"
 ISO_URL="${ISO_URL:-https://releases.ubuntu.com/${RELEASE}/${ISO_NAME}}"
 SUMS_URL="${SUMS_URL:-https://releases.ubuntu.com/${RELEASE}/SHA256SUMS}"
 
-CACHE="${CACHE:-build/cache}"
+# Outside the working tree on purpose. Feature branches are developed in git
+# worktrees, one directory per branch, and build/ is gitignored -- so a
+# per-tree cache means every worktree re-downloads the same 2.8G installer ISO.
+# Packer already caches in ~/.cache/packer for the same reason. Override with
+# CACHE=... for a one-off build against a different ISO.
+CACHE="${CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/workstation/iso}"
 OUT_DIR="${OUT_DIR:-build}"
 VERSION="${VERSION:-dev}"
 OUT_ISO="${OUT_DIR}/workstation-${VERSION}-installer.iso"

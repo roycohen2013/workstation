@@ -21,6 +21,39 @@ workstation_timezone: America/New_York
 workstation_locale: en_US.UTF-8
 workstation_keyboard_layout: us
 
+# --- Interactive shell defaults ----------------------------------------------
+# Applied to Ubuntu's shipped .bashrc, in /etc/skel (so users created later
+# inherit them) and in workstation_user's home (already populated from skel by
+# the time this runs). These are shell defaults for the image, distinct from
+# personal dotfiles -- roles/dotfiles deliberately pulls those at first login
+# rather than baking them in. If chezmoi is later given .bashrc to manage, it
+# owns the file and these settings are whatever that repository says.
+base_bash_force_color_prompt: true
+
+# --- Hostname and IP on the desktop -------------------------------------------
+# Which machine am I on, answered without opening a terminal. The text is
+# stamped onto the wallpaper rather than drawn by a desktop widget, which is
+# how Sysinternals BGInfo has always done it on Windows and how BGINFO4X and
+# lbginfo do it on Linux.
+#
+# Not conky, though this repo already installs it: conky is an X11 application
+# and this desktop is GNOME on Wayland, where it has open upstream bugs -- the
+# window not appearing, right-alignment failing, own_window_type=desktop
+# vanishing when the desktop is clicked. Not a GNOME Shell extension either:
+# extensions break on every GNOME major version, and a wallpaper does not.
+#
+# desktop_info_base_wallpaper must stay a PRISTINE source image. The generated
+# file is written elsewhere and set as the wallpaper; stamping the current
+# wallpaper instead would re-stamp its own output and the text would compound
+# on every refresh.
+desktop_info_enabled: true
+desktop_info_base_wallpaper: /usr/share/backgrounds/warty-final-ubuntu.png
+desktop_info_refresh: 2min
+desktop_info_font: /usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf
+desktop_info_pointsize: 20
+base_bash_histsize: 50000
+base_bash_histfilesize: 50000
+
 # Public keys authorised for SSH into this machine. Leave empty to disable
 # key-based login. Private keys NEVER belong in this repo or the image.
 workstation_authorized_keys: []
@@ -32,6 +65,18 @@ workstation_docker_enabled: true
 workstation_flatpak_enabled: true
 # Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
 workstation_claude_desktop_enabled: true
+# Claude Code, the terminal agent. Installed from Anthropic's signed apt
+# repository rather than the `curl | bash` native installer: that installer
+# puts the binary in ONE user's ~/.local/bin and self-updates in the
+# background, which is the wrong shape for an image flashed onto many machines
+# and used by whoever logs in. The package is system-wide and updates with the
+# rest of the system.
+workstation_claude_code_enabled: true
+# GitHub CLI, from GitHub's own repository rather than the Ubuntu archive.
+# The archive carries 2.46.0 against upstream 2.99.0 -- 53 minor versions --
+# and gh gains subcommands and flags often enough that scripting against the
+# archive build means checking what exists in it first.
+workstation_gh_enabled: true
 workstation_chrome_enabled: true
 workstation_vscode_enabled: true
 
@@ -52,6 +97,38 @@ balena_etcher_deb_url: >-
 # instead of installing something unverified.
 balena_etcher_deb_sha256: 2bdebb46c9f750a9abf11c188ff69a405b4a4fed114333d634c3b3fe59a64057
 workstation_1password_enabled: true
+
+# Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
+# Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt
+# repository, no snap, no flatpak -- confirmed against their README, which
+# links the AppImage as the only Linux download. Pinned and checksummed, the
+# same trust model as balena_etcher, for the same reason: a release URL alone
+# verifies nothing.
+#
+# ~470MB, the largest single thing in this image -- more than the four
+# LibreOffice applications combined. Recorded here so that weight is
+# attributable later rather than looking unaccounted for.
+#
+# v0.75.5 is the current STABLE release. The newer v0.76.0 is marked
+# prerelease; the app also has its own alpha channel, switchable in
+# Settings -> Advanced. Bump deliberately.
+#
+# Note their telemetry is on by default: anonymous usage analytics to PostHog,
+# correlated by a random per-install ID. That ID is generated per user on first
+# run, not at install, so nothing machine-specific is baked into the image and
+# roles/seal needs no change. Opting out is a GUI setting
+# (Settings -> Advanced -> Analytics), so it cannot be disabled declaratively.
+workstation_nimbalyst_enabled: true
+nimbalyst_version: "0.75.5"
+nimbalyst_appimage_url: >-
+  https://github.com/nimbalyst/nimbalyst/releases/download/v{{
+  nimbalyst_version }}/Nimbalyst-Linux.AppImage
+# From the release's own latest-linux.yml, which electron-builder publishes as
+# base64; converted to the hex Ansible expects and length-checked at 128.
+# A 128-character hash cannot be wrapped -- a folded scalar would inject a
+# space into it -- so the length rule is waived for this one line.
+# yamllint disable-line rule:line-length
+nimbalyst_appimage_sha512: 0b86fc9b173d633530d6b6e8782d99c8a447a82db8b5dae6fd2f3ee5c74576aa3c6bdcac230755fab54558b82fe212b42ff25ea1cc5201cc9708e5771432d995
 
 # 1Password additionally documents a debsig-verify policy, which checks the
 # .deb's own signature on top of apt's repository signature. The policy lives
@@ -97,7 +174,6 @@ apps_apt_base:
   - zsh
   - htop
   - btop
-  - conky-all
   # neofetch was archived upstream in 2024 and dropped from the Ubuntu
   # archive; fastfetch is its actively maintained, packaged successor -- same
   # purpose, drop-in compatible config format.
@@ -146,6 +222,16 @@ apps_apt_dev:
   - direnv
   - shellcheck
   - make
+  # The rest of what `make lint` needs, so a machine built from this image can
+  # lint the repo that produced it -- shellcheck and make are already above.
+  # ansible-core, not the full `ansible` bundle: it is what provides
+  # ansible-playbook, which lint-ansible runs for its syntax check, and this
+  # repo installs its collections separately from ansible/requirements.yml.
+  # pipx is here for docsible, which is PyPI-only -- see roles/dev.
+  - yamllint
+  - ansible-lint
+  - ansible-core
+  - pipx
 
 # --- APT: desktop ------------------------------------------------------------
 # Ignored entirely when workstation_desktop_enabled is false.
@@ -180,14 +266,40 @@ apps_apt_desktop:
   # Recorded here so those libraries are attributable later: without this note,
   # a Qt6 stack on a GNOME image looks like something nobody asked for.
   - krdc
+  # Déjà Dup is ~1.8MB, but pulls restic (~25MB) as its backup engine -- version
+  # 50 switched to restic from the duplicity it used for years. Its other deps
+  # and recommends (gvfs-backends, gvfs-fuse, packagekit, fuse3) are already
+  # here via the desktop set, so restic is the whole real cost. Recorded so 25MB
+  # of Go binary is attributable later rather than looking unaccounted for.
+  #
+  # It installs an XDG autostart entry, deja-dup-monitor, which runs per-user
+  # and stays inert until someone configures a backup in their own dconf. It
+  # ships no systemd unit and writes no machine identity, so nothing needs
+  # stripping in roles/seal -- confirmed by inspecting the .deb, not assumed.
+  - deja-dup
   - xclip
   - wl-clipboard
   - wireshark
   - tshark
+  # Stamping the desktop wallpaper needs a renderer and a font whose path is
+  # predictable. fonts-dejavu-core rather than the fonts already declared above
+  # because ImageMagick is pointed at a file path, and DejaVuSansMono.ttf has
+  # lived at the same place for years.
+  - imagemagick
+  - fonts-dejavu-core
 
 # Packages to remove (Ubuntu ships a few things you may not want).
 apps_apt_absent:
   - popularity-contest
+  # Installed here for months and never configured, and it could not have
+  # worked anyway: conky is an X11 application and this desktop is GNOME on
+  # Wayland, where it has open upstream bugs -- the window not appearing,
+  # right-alignment failing, own_window_type=desktop vanishing when the desktop
+  # is clicked. Its job here, showing hostname and IP on the desktop, is done
+  # by the wallpaper stamp instead (see desktop_info_* above), which is
+  # compositor-agnostic. Declared absent rather than merely dropped from
+  # apps_apt_base, or machines already converged would keep it forever.
+  - conky-all
 
 # --- APT: third-party repositories -------------------------------------------
 # Each entry adds a signed keyring and a sources.list.d entry. Keys are
@@ -199,7 +311,7 @@ apps_apt_repos:
     repo: >-
       deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg]
       https://download.docker.com/linux/ubuntu
-      {{ ansible_distribution_release }} stable
+      {{ ansible_facts['distribution_release'] }} stable
     packages:
       - docker-ce
       - docker-ce-cli
@@ -215,7 +327,7 @@ apps_apt_repos:
     # working whichever entry ends up on disk -- see roles/apps.
     key_armoured: true
     key_path: /usr/share/keyrings/claude-desktop-archive-keyring.asc
-    # Suite is literally "stable" -- NOT {{ ansible_distribution_release }}.
+    # Suite is literally "stable" -- NOT the Ubuntu codename.
     # This repo publishes one suite for all releases, so templating the Ubuntu
     # codename here would 404. Key fingerprint per Anthropic's docs:
     #   31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
@@ -232,7 +344,7 @@ apps_apt_repos:
     # https rather than the http Google documents: apt verifies signatures
     # either way, so this is about not advertising which packages we fetch.
     # Suite is "stable" -- Google publishes one suite for all releases, so
-    # {{ ansible_distribution_release }} would 404 here (same as claude-desktop).
+    # the Ubuntu codename would 404 here (same as claude-desktop).
     repo: >-
       deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg]
       https://dl.google.com/linux/chrome/deb/
@@ -273,13 +385,69 @@ apps_apt_repos:
     packages:
       - code
 
+  # Vendor key path, not this repo's default. Packer and Terraform are
+  # requirements of this project, so a machine is very likely to have already
+  # installed them by following HashiCorp's own instructions -- which write
+  # /etc/apt/sources.list.d/hashicorp.list, the same file apt_repository
+  # writes, with signed-by pointing at their path. Declaring our own path
+  # there appends a second line for the same origin, and apt then refuses to
+  # read its source list at all:
+  #   E:Conflicting values set for option Signed-By regarding source
+  #   https://apt.releases.hashicorp.com/ ... E:The list of sources could not
+  #   be read.
+  # Matching their documented layout makes our line identical to theirs, so
+  # the two collapse into one instead of conflicting. The key itself is the
+  # same either way -- verified byte-identical (sha256) at both paths.
+  - name: claude-code
+    enabled: "{{ workstation_claude_code_enabled }}"
+    key_url: https://downloads.claude.ai/keys/claude-code.asc
+    # Armoured and at the vendor's own path, like claude-desktop above: the key
+    # stays a .asc rather than being dearmoured, and signed-by must match.
+    key_armoured: true
+    key_path: /etc/apt/keyrings/claude-code.asc
+    # Suite is literally "stable", NOT the Ubuntu codename -- templating the
+    # codename here 404s, the same trap as claude-desktop and google-chrome.
+    # "stable" trails releases by about a week and skips ones with major
+    # regressions. The "latest" channel changes BOTH the path and the suite
+    # (.../apt/latest latest main), so switching is a two-part edit.
+    repo: >-
+      deb [signed-by=/etc/apt/keyrings/claude-code.asc]
+      https://downloads.claude.ai/claude-code/apt/stable
+      stable main
+    packages:
+      - claude-code
+
+  - name: github-cli
+    enabled: "{{ workstation_gh_enabled }}"
+    key_url: https://cli.github.com/packages/githubcli-archive-keyring.gpg
+    # GitHub publishes a BINARY keyring, not an armoured .asc. The default
+    # path here runs `gpg --dearmor` over it, which was checked rather than
+    # assumed: dearmouring an already-binary key is a passthrough, byte for
+    # byte, so the default handling is correct as-is.
+    #
+    # key_path is the vendor's documented filename, not this repo's
+    # <name>.gpg default. Same lesson as hashicorp: when a vendor documents a
+    # keyring path, anything else it or its users install can declare that
+    # path for the same origin, and two Signed-By values for one origin make
+    # apt refuse to read its source list at all.
+    key_path: /etc/apt/keyrings/githubcli-archive-keyring.gpg
+    # Suite is "stable" -- GitHub publishes one suite for every release, so
+    # the Ubuntu codename would 404 here.
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg]
+      https://cli.github.com/packages
+      stable main
+    packages:
+      - gh
+
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg
+    key_path: /usr/share/keyrings/hashicorp-archive-keyring.gpg
     repo: >-
-      deb [arch=amd64 signed-by=/etc/apt/keyrings/hashicorp.gpg]
+      deb [arch=amd64 signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg]
       https://apt.releases.hashicorp.com
-      {{ ansible_distribution_release }} main
+      {{ ansible_facts['distribution_release'] }} main
     packages:
       - packer
       - terraform
@@ -293,6 +461,18 @@ apps_snap: []
 
 # --- Flatpak (flathub) -------------------------------------------------------
 apps_flatpak:
+  # Obsidian, from Flathub rather than the official .deb. The .deb is 102MB and
+  # would need pinning with a checksum the way balena_etcher, terraform-docs and
+  # nimbalyst are -- a fourth hand-maintained pin on an app that releases often.
+  # The flatpak needs no version and updates itself, and the sandbox is not in
+  # the way: Flathub's manifest already grants home, /media, /mnt and
+  # /run/media, so vaults are reachable, plus a wayland socket and
+  # org.freedesktop.secrets for sync credentials.
+  #
+  # Note for anyone automating against their releases: obsidianmd's
+  # /releases/latest returns the ANDROID APK, because mobile and desktop ship
+  # from one repository. The desktop assets live on a different tag.
+  - md.obsidian.Obsidian
   - com.spotify.Client
   - org.signal.Signal
 
@@ -305,6 +485,37 @@ dev_mise_runtimes:
   python: "3.13"
   go: latest
   rust: latest
+
+# Whether to download the runtimes above during a converge, as opposed to just
+# declaring them. Separated because they are different kinds of thing: the
+# declaration is configuration this repo owns, the download is several hundred
+# megabytes pulled from four upstreams that can be slow or briefly broken for
+# reasons that say nothing about whether this config is right.
+#
+# CI sets this false. Its apply job exists to prove the playbook converges and
+# settles, and it was instead spending most of its runtime fetching toolchains
+# and then failing on `mise install core:python` with a filesystem permission
+# error specific to the runner image -- a red build that told you nothing.
+# Left true everywhere else, so a real converge still installs them.
+dev_mise_install_runtimes: true
+
+# terraform-docs generates the tables in docs/terraform.md. Not packaged for
+# Ubuntu and not on PyPI, so it is a pinned release binary with a checksum --
+# the same trust model balena_etcher uses, for the same reason: nothing else
+# verifies what a release URL hands back.
+#
+# The pin is load-bearing beyond supply chain. `make lint-docs` regenerates
+# the committed docs and fails if anything moved, so a version that formats
+# its tables even slightly differently turns into a red build on a machine
+# that happened to install a newer one. Bump it deliberately, then run
+# `make docs-config` and commit the regenerated output in the same change.
+dev_terraform_docs_version: "0.24.0"
+dev_terraform_docs_url: >-
+  https://github.com/terraform-docs/terraform-docs/releases/download/v{{
+  dev_terraform_docs_version }}/terraform-docs-v{{ dev_terraform_docs_version
+  }}-linux-amd64.tar.gz
+# From the release's own terraform-docs-v<version>.sha256sum.
+dev_terraform_docs_sha256: 9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3
 
 # =============================================================================
 #  DOTFILES
@@ -380,7 +591,7 @@ base_sysctl:
 # =============================================================================
 #  HARDWARE (laptop)
 #
-#  Installed in every image, including VM builds, because the golden image is
+#  Installed in every image, including VM builds, because the image is
 #  meant to be flashable onto metal. firstboot decides at runtime whether to
 #  actually enable the power/thermal services.
 # =============================================================================

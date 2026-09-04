@@ -47,8 +47,40 @@ and still leave every setting overridable by the user afterwards. |
 | Install dconf user profile | ansible.builtin.copy | False |  |
 | Ensure dconf local db directory exists | ansible.builtin.file | False |  |
 | Write GNOME defaults | ansible.builtin.template | False |  |
-| Configure GDM | ansible.builtin.copy | False | --- Login manager ------------------------------------------------------------ |
-| Install flatpak | ansible.builtin.apt | True | --- Flatpak ------------------------------------------------------------------ |
+| Compile the dconf system database | ansible.builtin.command | True | --- Login manager ------------------------------------------------------------
+dconf keyfiles are inert until they are compiled. /etc/dconf/profile/user
+names `system-db:local`, and dconf resolves that to the BINARY database at
+/etc/dconf/db/local -- not to the keyfile directory beside it. Without this
+step the role wrote /etc/dconf/db/local.d/00-workstation, nothing compiled
+it, and every setting in desktop_dconf was ignored on every machine. dconf
+said so on every access, into stderr nobody was reading:
+
+dconf-WARNING: unable to open file '/etc/dconf/db/local': No such file or
+directory; expect degraded performance
+
+Run unconditionally rather than notified by a handler: a handler only fires
+when the keyfile changes, which would leave every already-converged machine
+with a missing database forever. It is cheap and writing an identical
+database is a no-op, so changed_when is false. |
+| Configure GDM | ansible.builtin.copy | False |  |
+| Fail early if the base wallpaper is missing | ansible.builtin.stat | True | --- Flatpak ------------------------------------------------------------------
+--- Hostname and IP on the desktop -------------------------------------------
+Stamped onto the wallpaper rather than drawn by a widget. See the note in
+group_vars for why not conky and why not a GNOME extension. |
+| Assert the base wallpaper exists | ansible.builtin.assert | True | Loud rather than silent: if a future Ubuntu drops this file, the converge
+stops here with the path in the message, instead of installing a timer that
+quietly renders nothing on every machine. |
+| Install the desktop info renderer | ansible.builtin.copy | True |  |
+| Install the desktop info user units | ansible.builtin.copy | True | A USER unit, not a system one: it needs the session's D-Bus to call gsettings,
+and the wallpaper is a per-user setting. Installed to /etc/systemd/user and
+enabled with `systemctl --global enable`, so every user who logs in gets it
+without anyone running a per-user command -- which matters for an image that
+is flashed onto machines other people log into. |
+| Enable the desktop info timer for every user | ansible.builtin.systemd_service | True | scope: global rather than `command: systemctl --global enable` -- the module
+does exactly this and is idempotent without a `creates:` guard pointing at an
+implementation detail. ansible-lint's command-instead-of-module caught the
+first version, which is the rule earning its place. |
+| Install flatpak | ansible.builtin.apt | True |  |
 | Add flathub remote | community.general.flatpak_remote | True |  |
 
 

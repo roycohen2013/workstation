@@ -75,6 +75,26 @@
   notify: Update dconf
 
 # --- Login manager ------------------------------------------------------------
+# dconf keyfiles are inert until they are compiled. /etc/dconf/profile/user
+# names `system-db:local`, and dconf resolves that to the BINARY database at
+# /etc/dconf/db/local -- not to the keyfile directory beside it. Without this
+# step the role wrote /etc/dconf/db/local.d/00-workstation, nothing compiled
+# it, and every setting in desktop_dconf was ignored on every machine. dconf
+# said so on every access, into stderr nobody was reading:
+#
+#   dconf-WARNING: unable to open file '/etc/dconf/db/local': No such file or
+#   directory; expect degraded performance
+#
+# Run unconditionally rather than notified by a handler: a handler only fires
+# when the keyfile changes, which would leave every already-converged machine
+# with a missing database forever. It is cheap and writing an identical
+# database is a no-op, so changed_when is false.
+- name: Compile the dconf system database
+  ansible.builtin.command:
+    cmd: dconf update
+  changed_when: false
+  when: workstation_desktop_enabled | bool
+
 - name: Configure GDM
   ansible.builtin.copy:
     content: |
@@ -98,6 +118,141 @@
   failed_when: false
 
 # --- Flatpak ------------------------------------------------------------------
+# --- Hostname and IP on the desktop -------------------------------------------
+# Stamped onto the wallpaper rather than drawn by a widget. See the note in
+# group_vars for why not conky and why not a GNOME extension.
+- name: Fail early if the base wallpaper is missing
+  ansible.builtin.stat:
+    path: "{{ desktop_info_base_wallpaper }}"
+  register: desktop_info_base
+  when:
+    - workstation_desktop_enabled | bool
+    - desktop_info_enabled | bool
+
+# Loud rather than silent: if a future Ubuntu drops this file, the converge
+# stops here with the path in the message, instead of installing a timer that
+# quietly renders nothing on every machine.
+- name: Assert the base wallpaper exists
+  ansible.builtin.assert:
+    that: desktop_info_base.stat.exists
+    fail_msg: >-
+      desktop_info_base_wallpaper does not exist:
+      {{ desktop_info_base_wallpaper }}. Pick one that ships with this release
+      (ls /usr/share/backgrounds) and set desktop_info_base_wallpaper.
+  when:
+    - workstation_desktop_enabled | bool
+    - desktop_info_enabled | bool
+
+- name: Install the desktop info renderer
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      # Managed by Ansible (roles/desktop). Stamps hostname and primary IP onto
+      # a copy of the base wallpaper and sets it as the background.
+      #
+      # ImageMagick 7 renames the CLI: the command is `magick`, not `convert`.
+      set -euo pipefail
+
+      BASE="{{ desktop_info_base_wallpaper }}"
+      FONT="{{ desktop_info_font }}"
+      POINTSIZE="{{ desktop_info_pointsize }}"
+      OUT_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/workstation"
+      OUT="$OUT_DIR/desktop-info.png"
+      STAMP="$OUT_DIR/desktop-info.txt"
+
+      [ -r "$BASE" ] || { echo "base wallpaper missing: $BASE" >&2; exit 1; }
+
+      host=$(hostname)
+      # Source address of the route that actually carries traffic -- not
+      # `hostname -I`, which lists every address including docker0 and returns
+      # them in no dependable order.
+      ip=$(ip -4 route get 1.1.1.1 2>/dev/null \
+             | awk '{for (i = 1; i <= NF; i++) if ($i == "src") {print $(i + 1); exit}}')
+      [ -n "$ip" ] || ip="no network"
+      text="$host
+      $ip"
+
+      mkdir -p "$OUT_DIR"
+
+      # Re-render only when the text actually changed. Without this the timer
+      # rewrites a multi-megabyte PNG every couple of minutes and re-sets the
+      # background, which makes the desktop flicker for no reason.
+      if [ -f "$OUT" ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$text" ]; then
+          exit 0
+      fi
+
+      tmp=$(mktemp "$OUT_DIR/.desktop-info.XXXXXX.png")
+      trap 'rm -f "$tmp"' EXIT
+      # Drawn twice: a dark copy offset by one pixel, then the light text over
+      # it, so it stays readable on a pale wallpaper as well as a dark one.
+      magick "$BASE" \
+          -font "$FONT" -pointsize "$POINTSIZE" -gravity SouthEast \
+          -fill '#000000A0' -annotate +41+39 "$text" \
+          -fill white       -annotate +40+40 "$text" \
+          "$tmp"
+      mv "$tmp" "$OUT"
+      printf '%s' "$text" > "$STAMP"
+
+      gsettings set org.gnome.desktop.background picture-uri "file://$OUT"
+      gsettings set org.gnome.desktop.background picture-uri-dark "file://$OUT"
+    dest: /usr/local/bin/workstation-desktop-info
+    mode: "0755"
+  when:
+    - workstation_desktop_enabled | bool
+    - desktop_info_enabled | bool
+
+# A USER unit, not a system one: it needs the session's D-Bus to call gsettings,
+# and the wallpaper is a per-user setting. Installed to /etc/systemd/user and
+# enabled with `systemctl --global enable`, so every user who logs in gets it
+# without anyone running a per-user command -- which matters for an image that
+# is flashed onto machines other people log into.
+- name: Install the desktop info user units
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "/etc/systemd/user/{{ item.name }}"
+    mode: "0644"
+  loop:
+    - name: workstation-desktop-info.service
+      content: |
+        [Unit]
+        Description=Stamp hostname and IP onto the desktop wallpaper
+        After=graphical-session.target
+        PartOf=graphical-session.target
+
+        [Service]
+        Type=oneshot
+        ExecStart=/usr/local/bin/workstation-desktop-info
+    - name: workstation-desktop-info.timer
+      content: |
+        [Unit]
+        Description=Keep the desktop hostname and IP stamp current
+
+        [Timer]
+        OnStartupSec=15s
+        OnUnitActiveSec={{ desktop_info_refresh }}
+        Unit=workstation-desktop-info.service
+
+        [Install]
+        WantedBy=timers.target
+  loop_control:
+    label: "{{ item.name }}"
+  when:
+    - workstation_desktop_enabled | bool
+    - desktop_info_enabled | bool
+
+# scope: global rather than `command: systemctl --global enable` -- the module
+# does exactly this and is idempotent without a `creates:` guard pointing at an
+# implementation detail. ansible-lint's command-instead-of-module caught the
+# first version, which is the rule earning its place.
+- name: Enable the desktop info timer for every user
+  ansible.builtin.systemd_service:
+    name: workstation-desktop-info.timer
+    enabled: true
+    scope: global
+  when:
+    - workstation_desktop_enabled | bool
+    - desktop_info_enabled | bool
+
 - name: Install flatpak
   ansible.builtin.apt:
     name:

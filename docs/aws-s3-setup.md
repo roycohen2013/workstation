@@ -5,7 +5,7 @@
 
 This repo's default artifact store is Cloudflare R2 (`terraform/artifacts/`), chosen
 because R2 charges nothing for egress and pulling a multi-gigabyte image down a few
-times a month is otherwise the dominant cost. See the [Publishing](../README.md#publishing)
+times a month is otherwise the dominant cost. See the [Publishing](publishing.md)
 section of the README for that path.
 
 `scripts/publish-image.sh` and `scripts/fetch-image.sh` talk to the bucket through the
@@ -219,7 +219,7 @@ make fetch                             # on this or another machine
 
 `fetch-image.sh` verifies SHA256SUMS before treating anything as usable, so a
 successful `make fetch` is a genuine end-to-end confirmation: the bucket accepted the
-upload, the channel pointer moved, and the checksum on the way back down matches.
+upload, the channel moved, and the checksum on the way back down matches.
 
 ## 5. Wire it into CI (optional)
 
@@ -277,7 +277,7 @@ choice rather than a surprise on next month's bill:
 If you're setting this up because you're already paying for AWS and want everything in
 one place, or because of a compliance requirement that specifically calls for AWS, that
 tradeoff is probably fine. If the only reason is "I don't have a Cloudflare account,"
-creating one costs nothing and the [R2 path](../README.md#publishing) avoids the egress
+creating one costs nothing and the [R2 path](publishing.md) avoids the egress
 line entirely.
 
 ## Troubleshooting

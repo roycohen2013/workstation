@@ -31,3 +31,6 @@ packer_cache/
 .vscode/
 .idea/
 .DS_Store
+
+# Ansible's local cache, created by ansible-galaxy and friends.
+.ansible/

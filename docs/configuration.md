@@ -44,6 +44,61 @@ Every setting in `ansible/group_vars/all.yml`, with the explanation that accompa
 
 `us`
 
+### `base_bash_force_color_prompt`
+
+`true`
+
+**Interactive shell defaults**
+Applied to Ubuntu's shipped .bashrc, in /etc/skel (so users created later
+inherit them) and in workstation_user's home (already populated from skel by
+the time this runs). These are shell defaults for the image, distinct from
+personal dotfiles -- roles/dotfiles deliberately pulls those at first login
+rather than baking them in. If chezmoi is later given .bashrc to manage, it
+owns the file and these settings are whatever that repository says.
+
+### `desktop_info_enabled`
+
+`true`
+
+**Hostname and IP on the desktop**
+Which machine am I on, answered without opening a terminal. The text is
+stamped onto the wallpaper rather than drawn by a desktop widget, which is
+how Sysinternals BGInfo has always done it on Windows and how BGINFO4X and
+lbginfo do it on Linux.
+Not conky, though this repo already installs it: conky is an X11 application
+and this desktop is GNOME on Wayland, where it has open upstream bugs -- the
+window not appearing, right-alignment failing, own_window_type=desktop
+vanishing when the desktop is clicked. Not a GNOME Shell extension either:
+extensions break on every GNOME major version, and a wallpaper does not.
+desktop_info_base_wallpaper must stay a PRISTINE source image. The generated
+file is written elsewhere and set as the wallpaper; stamping the current
+wallpaper instead would re-stamp its own output and the text would compound
+on every refresh.
+
+### `desktop_info_base_wallpaper`
+
+`/usr/share/backgrounds/warty-final-ubuntu.png`
+
+### `desktop_info_refresh`
+
+`2min`
+
+### `desktop_info_font`
+
+`/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf`
+
+### `desktop_info_pointsize`
+
+`20`
+
+### `base_bash_histsize`
+
+`50000`
+
+### `base_bash_histfilesize`
+
+`50000`
+
 ### `workstation_authorized_keys`
 
 `[]`
@@ -70,6 +125,26 @@ key-based login. Private keys NEVER belong in this repo or the image.
 `true`
 
 Claude Desktop. Linux support is beta (Ubuntu 22.04+/Debian 12+, amd64/arm64).
+
+### `workstation_claude_code_enabled`
+
+`true`
+
+Claude Code, the terminal agent. Installed from Anthropic's signed apt
+repository rather than the `curl | bash` native installer: that installer
+puts the binary in ONE user's ~/.local/bin and self-updates in the
+background, which is the wrong shape for an image flashed onto many machines
+and used by whoever logs in. The package is system-wide and updates with the
+rest of the system.
+
+### `workstation_gh_enabled`
+
+`true`
+
+GitHub CLI, from GitHub's own repository rather than the Ubuntu archive.
+The archive carries 2.46.0 against upstream 2.99.0 -- 53 minor versions --
+and gh gains subcommands and flags often enough that scripting against the
+archive build means checking what exists in it first.
 
 ### `workstation_chrome_enabled`
 
@@ -113,6 +188,46 @@ instead of installing something unverified.
 ### `workstation_1password_enabled`
 
 `true`
+
+### `workstation_nimbalyst_enabled`
+
+`true`
+
+Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
+Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt
+repository, no snap, no flatpak -- confirmed against their README, which
+links the AppImage as the only Linux download. Pinned and checksummed, the
+same trust model as balena_etcher, for the same reason: a release URL alone
+verifies nothing.
+~470MB, the largest single thing in this image -- more than the four
+LibreOffice applications combined. Recorded here so that weight is
+attributable later rather than looking unaccounted for.
+v0.75.5 is the current STABLE release. The newer v0.76.0 is marked
+prerelease; the app also has its own alpha channel, switchable in
+Settings -> Advanced. Bump deliberately.
+Note their telemetry is on by default: anonymous usage analytics to PostHog,
+correlated by a random per-install ID. That ID is generated per user on first
+run, not at install, so nothing machine-specific is baked into the image and
+roles/seal needs no change. Opting out is a GUI setting
+(Settings -> Advanced -> Analytics), so it cannot be disabled declaratively.
+
+### `nimbalyst_version`
+
+`"0.75.5"`
+
+### `nimbalyst_appimage_url`
+
+_(list or block — see the file)_
+
+### `nimbalyst_appimage_sha512`
+
+`0b86fc9b173d633530d6b6e8782d99c8a447a82db8b5dae6fd2f3ee5c74576aa3c6bdcac230755fab54558b82fe212b42ff25ea1cc5201cc9708e5771432d995`
+
+From the release's own latest-linux.yml, which electron-builder publishes as
+base64; converted to the hex Ansible expects and length-checked at 128.
+A 128-character hash cannot be wrapped -- a folded scalar would inject a
+space into it -- so the length rule is waived for this one line.
+yamllint disable-line rule:line-length
 
 ### `apps_1password_debsig_key_id`
 
@@ -224,6 +339,45 @@ versions in one place. Set to {} to skip.
 
 _(list or block — see the file)_
 
+### `dev_mise_install_runtimes`
+
+`true`
+
+Whether to download the runtimes above during a converge, as opposed to just
+declaring them. Separated because they are different kinds of thing: the
+declaration is configuration this repo owns, the download is several hundred
+megabytes pulled from four upstreams that can be slow or briefly broken for
+reasons that say nothing about whether this config is right.
+CI sets this false. Its apply job exists to prove the playbook converges and
+settles, and it was instead spending most of its runtime fetching toolchains
+and then failing on `mise install core:python` with a filesystem permission
+error specific to the runner image -- a red build that told you nothing.
+Left true everywhere else, so a real converge still installs them.
+
+### `dev_terraform_docs_version`
+
+`"0.24.0"`
+
+terraform-docs generates the tables in docs/terraform.md. Not packaged for
+Ubuntu and not on PyPI, so it is a pinned release binary with a checksum --
+the same trust model balena_etcher uses, for the same reason: nothing else
+verifies what a release URL hands back.
+The pin is load-bearing beyond supply chain. `make lint-docs` regenerates
+the committed docs and fails if anything moved, so a version that formats
+its tables even slightly differently turns into a red build on a machine
+that happened to install a newer one. Bump it deliberately, then run
+`make docs-config` and commit the regenerated output in the same change.
+
+### `dev_terraform_docs_url`
+
+_(list or block — see the file)_
+
+### `dev_terraform_docs_sha256`
+
+`9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3`
+
+From the release's own terraform-docs-v<version>.sha256sum.
+
 ## Dotfiles
  Managed with chezmoi. The image ships the chezmoi binary only -- the repo
  is pulled on first login, so nothing personal is baked into a flashable
@@ -307,7 +461,7 @@ capture requires elevation.
 _(list or block — see the file)_
 
 ## Hardware (Laptop)
- Installed in every image, including VM builds, because the golden image is
+ Installed in every image, including VM builds, because the image is
  meant to be flashable onto metal. firstboot decides at runtime whether to
  actually enable the power/thermal services.
 

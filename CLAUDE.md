@@ -1,55 +1,75 @@
-# Working in this repo
+# workstation
 
-This repo builds a personal Ubuntu workstation image (Packer + Ansible + Terraform) that
-runs both as a VM and flashed onto laptop hardware. Almost every change a user asks for
-is one or two lines of data in `ansible/group_vars/all.yml` — the roles consume that data
-and rarely need touching.
+Infrastructure as code for a personal Ubuntu workstation image: one Ansible
+playbook run in two phases (`image` inside a Packer build VM, `live` against
+the machine you are on), producing an artifact that boots as a VM or on laptop
+hardware.
+
+Start with [README.md](README.md). When something breaks, go to
+[TROUBLESHOOTING.md](TROUBLESHOOTING.md) — it is organised by the exact error
+text — and run `make doctor`, which checks whether this machine still matches
+what the repo assumes.
+
+**The configuration surface is `ansible/group_vars/all.yml`.** Almost every
+change is one or two lines of data there; the roles are machinery that consumes
+it. Prefer editing that file over editing a role.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as markdown files under `.scratch/<feature-slug>/` in this repo,
+not in GitHub Issues. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and one `docs/adr/` at the repo root, both
+created lazily rather than upfront. See `docs/agents/domain.md`.
+
+## Making a configuration change
+
+This repo has its own `config-change` skill (`.claude/skills/config-change/`),
+and it takes precedence over general-purpose editing for anything that ends up
+on the image — adding or removing a package, adding an apt repository, changing
+a dconf setting, opening a firewall port, pinning a runtime. It exists because
+the expensive failure here is a misspelled package name: nothing catches it at
+edit time, and it surfaces 30–60 minutes into a Packer build. The skill checks
+the thing actually exists before committing.
 
 ## Committing
 
-**Use the `commit` skill for every commit. Do not hand-write `git commit` messages.**
+**Use the `commit` skill for every commit. Do not hand-write `git commit`
+messages.** It owns the whole path: the `CHANGELOG.md` entry, the Conventional
+Commits message, staging specific paths, validation, and the push.
 
-It owns the whole path: the `CHANGELOG.md` entry, the Conventional Commits message,
-staging specific paths, validation, and the push. The full convention is in
-[CONTRIBUTING.md](CONTRIBUTING.md); the short version:
+The full convention is in [CONTRIBUTING.md](CONTRIBUTING.md); the short version:
 
-- `<type>[(<scope>)][!]: <description>` — types are `feat` `fix` `refactor` `docs` `test`
-  `chore` `ci` `perf`; scopes are `ansible` `packer` `terraform` `iso` `scripts` `docs`
-  `ci` `make` `skill` `goss` `image`.
+- `<type>[(<scope>)][!]: <description>` — types are `feat` `fix` `refactor`
+  `docs` `test` `chore` `ci` `perf`; scopes are `ansible` `packer` `terraform`
+  `iso` `scripts` `docs` `ci` `make` `skill` `goss` `image`.
 - The subject states the outcome, not the technique.
 - 72 characters per line. No trailing period. No emoji. No attribution lines.
 - `CHANGELOG.md` is edited **only** while preparing a commit, never during
   implementation, and only for user-facing changes.
 - Validate with `make lint-commits` before pushing.
 
-Commits before `feat: standardize commits on Conventional Commits and a changelog`
-predate this convention and are not being rewritten.
+**Branches are squash-merged, so the pull request title becomes the commit on
+`main`.** Give the PR a conventional title too, or the convention stops at the
+branch. Branching, PR and merge mechanics are in
+[docs/git-workflow.md](docs/git-workflow.md).
 
-## Changing the image configuration
+Commits before `feat: standardize commits on Conventional Commits and a
+changelog` predate this convention and are not being rewritten, which is why
+`make lint-commits` checks `HEAD` alone by default.
 
-Use the `config-change` skill. It routes the change to the right key, traces what else it
-touches, verifies the package or repository actually exists before a 45-minute build
-discovers it does not, lints, and then hands off to `commit`.
+## Verification expectations
 
-## Verifying
+Changes to this repo are verified against reality rather than assumed:
 
-```bash
-make lint           # yaml, ansible, packer, terraform, shell, docs
-make lint-commits   # commit messages
-make verify-repos   # every declared third-party apt repo still resolves
-make image          # full build: needs /dev/kvm, takes 30-60 minutes
-```
-
-`make lint-docs` (part of `make lint`) regenerates every committed doc and fails if
-anything moved. **If you edit `scripts/gen-config-docs.py`, run `make docs-config` and
-commit the result**, or CI's `docs` job goes red.
-
-## Things that cost a build if you get them wrong
-
-- **A misspelled package name** fails deep inside a Packer run, 30–60 minutes in.
-  `.claude/skills/config-change/scripts/verify-change.sh` settles it in two seconds.
-- **Exit code 2 from any verify script means "could not check", not "passed".** Reporting
-  an unreachable check as verified launders a guess into a green tick.
-- **dconf values are GVariant literals** — a string needs its own inner quotes.
-- **A vendor repo's suite is not always the Ubuntu codename.** Some publish a single
-  `stable` suite for every release; templating the codename there 404s at `apt update`.
+- `make lint` before committing anything.
+- `.claude/skills/config-change/scripts/verify-change.sh` for anything naming
+  an external artifact. Exit 2 means "could not check", which is **not** a pass.
+- `make verify-repos` when touching third-party repositories or pinned
+  downloads.
+- A check that has never been seen failing is not yet a check — exercise the
+  failure path, not only the happy one.

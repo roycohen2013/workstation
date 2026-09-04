@@ -33,6 +33,32 @@ Description: Development tooling, Docker group membership and mise-managed runti
 | Install development packages | ansible.builtin.apt | False |  |
 | Link Debian-renamed binaries to their upstream names | ansible.builtin.file | False | fd and bat ship under alternate binary names on Debian/Ubuntu to avoid
 clashes; link them to the names everyone actually types. |
+| Install docsible | ansible.builtin.command | False | --- Repo tooling -------------------------------------------------------------
+The rest of what `make lint` needs is apt data in apps_apt_dev. docsible is
+not: it generates the per-role README files that `make lint-docs` checks for
+staleness, and it is published on PyPI only. Ubuntu's Python is externally
+managed (PEP 668), so a plain `pip install` refuses to run at all -- hence
+pipx, which builds it an isolated venv.
+
+--global is the part that matters. Without it pipx installs into the calling
+user's ~/.local/bin, and this image is flashed onto machines rather than
+built per-user: a tool in one home directory is off PATH for everyone else,
+and disappears with that home if the user is recreated. --global puts the
+venv in /opt/pipx and links the app into /usr/local/bin instead -- confirmed
+against pipx 1.8.0's own --help, the version resolute ships, rather than
+assumed from current docs. |
+| Check the installed terraform-docs version | ansible.builtin.command | False | terraform-docs is neither in the Ubuntu archive nor on PyPI, so it is
+fetched as a pinned release tarball. checksum: makes a tampered or truncated
+download fail the task outright rather than unpacking something unverified.
+Same gate as BalenaEtcher, for the same reason: the archive is downloaded and
+then deleted, so without a version check this task and the two after it
+reported changed on every converge. `terraform-docs --version` prints
+"terraform-docs version v0.24.0 <sha> linux/amd64", so the pinned version is
+matched as a substring rather than parsed. |
+| Download terraform-docs | ansible.builtin.get_url | True |  |
+| Install terraform-docs | ansible.builtin.unarchive | True | The tarball holds the bare binary at its root, so extra=... would scatter
+LICENSE and README into /usr/local/bin alongside it. |
+| Remove the downloaded terraform-docs archive | ansible.builtin.file | True |  |
 | Add user to the docker group | ansible.builtin.user | True | --- Docker ------------------------------------------------------------------- |
 | Enable docker | ansible.builtin.systemd | True |  |
 | Install mise | ansible.builtin.get_url | True | --- Language runtimes --------------------------------------------------------

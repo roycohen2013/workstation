@@ -57,6 +57,42 @@
     create_home: true
     state: present
 
+# --- Interactive shell defaults -----------------------------------------------
+# Both files, or the change only half-lands: /etc/skel is the template for
+# users created later, and workstation_user's copy was taken from skel when the
+# task above created them, so editing skel alone leaves the existing user
+# untouched.
+#
+# backrefs: true on the colour prompt is load-bearing. Without it lineinfile
+# APPENDS when the regexp does not match, and an appended
+# force_color_prompt=yes is inert: Ubuntu's .bashrc reads the variable at the
+# prompt block and then `unset`s it a few lines later, so anything set after
+# that point has no effect. With backrefs the task edits in place or does
+# nothing, which is the only correct behaviour here.
+- name: Set the colour prompt in bashrc
+  ansible.builtin.lineinfile:
+    path: "{{ item }}"
+    regexp: '^#?\s*force_color_prompt=yes'
+    line: "{{ 'force_color_prompt=yes' if base_bash_force_color_prompt | bool else '#force_color_prompt=yes' }}"
+    backrefs: true
+  loop:
+    - /etc/skel/.bashrc
+    - "/home/{{ workstation_user }}/.bashrc"
+
+# No backrefs here, deliberately: appending is a correct fallback for these
+# two. They are plain assignments that nothing unsets, so a later line wins if
+# a future Ubuntu stops shipping the defaults.
+- name: Set history sizes in bashrc
+  ansible.builtin.lineinfile:
+    path: "{{ item.0 }}"
+    regexp: "^{{ item.1.key }}="
+    line: "{{ item.1.key }}={{ item.1.value }}"
+  loop: "{{ ['/etc/skel/.bashrc', '/home/' ~ workstation_user ~ '/.bashrc'] | product([
+             {'key': 'HISTSIZE', 'value': base_bash_histsize},
+             {'key': 'HISTFILESIZE', 'value': base_bash_histfilesize}]) | list }}"
+  loop_control:
+    label: "{{ item.0 }} {{ item.1.key }}"
+
 - name: Grant passwordless sudo
   ansible.builtin.copy:
     content: "{{ workstation_user }} ALL=(ALL) NOPASSWD:ALL\n"
@@ -73,11 +109,26 @@
   when: workstation_authorized_keys | length > 0
 
 # --- Kernel tuning ------------------------------------------------------------
+# 99-, not 60-. sysctl.d files apply in lexicographic order across
+# /usr/lib/sysctl.d and /etc/sysctl.d, and the distribution already ships
+# entries that set values this repo also sets -- 30-localsearch.conf claims
+# fs.inotify.max_user_watches, 55-map-count.conf claims vm.max_map_count. At
+# 60- this file happens to win against those, but it loses to anything in the
+# 90s, which is where images and provisioning tools conventionally put their
+# own overrides. The CI idempotence pass showed exactly that: on a runner,
+# fs.inotify.max_user_watches was reported changed on every converge because
+# something applied after us put it back. 99- is the conventional slot for
+# local overrides and is what this file should always have used.
+- name: Remove the superseded sysctl file
+  ansible.builtin.file:
+    path: /etc/sysctl.d/60-workstation.conf
+    state: absent
+
 - name: Apply sysctl settings
   ansible.posix.sysctl:
     name: "{{ item.key }}"
     value: "{{ item.value }}"
-    sysctl_file: /etc/sysctl.d/60-workstation.conf
+    sysctl_file: /etc/sysctl.d/99-workstation.conf
     sysctl_set: true
     reload: true
     state: present

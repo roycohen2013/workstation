@@ -14,7 +14,7 @@ terraform {
   required_providers {
     libvirt = {
       source  = "dmacvicar/libvirt"
-      version = "~> 0.8"
+      version = "~> 0.8.0"
     }
   }
 }
@@ -27,7 +27,7 @@ provider "libvirt" {
 # resizes the filesystem and regenerates identity), and the build output must
 # stay pristine for publishing.
 resource "libvirt_volume" "root" {
-  name   = "workstation-testlab-${var.version}.qcow2"
+  name   = "workstation-testlab-${var.image_version}.qcow2"
   pool   = var.storage_pool
   source = var.image_path
   format = "qcow2"

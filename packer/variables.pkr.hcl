@@ -3,26 +3,32 @@
 # Nothing here is secret. Override on the command line with -var, or in a
 # .pkrvars.hcl file:  packer build -var-file=local.pkrvars.hcl packer/
 
+# The single place the Ubuntu release is written down. The ISO URL and the
+# checksum manifest are derived from it in locals (see workstation.pkr.hcl),
+# and scripts/build-iso.sh reads this value rather than keeping its own copy,
+# so bumping a release is a one-line change instead of four edits across two
+# files that must all be found.
 variable "ubuntu_release" {
   type        = string
   default     = "26.04"
-  description = "Ubuntu LTS release to build from."
+  description = "Ubuntu LTS release to build from. The single source for the release everywhere."
 }
 
+# Both default to empty, meaning "derive from ubuntu_release". They exist only
+# so a one-off build can point at a daily image or a local mirror without
+# editing the release above.
 variable "iso_url" {
   type        = string
-  default     = "https://releases.ubuntu.com/26.04/ubuntu-26.04-live-server-amd64.iso"
-  description = "Installer ISO. The live-server image is the base; the desktop comes from Ansible."
+  default     = ""
+  description = "Override the installer ISO URL. Empty derives it from ubuntu_release."
 }
 
 variable "iso_checksum" {
   type = string
-  # Resolved from the published SHA256SUMS at build time so a point release
-  # (26.04.1, .2, ...) does not require editing a hash in here by hand.
-  # Pinned value as of this writing:
-  #   dec49008a71f6098d0bcfc822021f4d042d5f2db279e4d75bdd981304f1ca5d9
-  default     = "file:https://releases.ubuntu.com/26.04/SHA256SUMS"
-  description = "ISO checksum, or a file: URL to a SHA256SUMS manifest."
+  # Derived as a file: URL to the published SHA256SUMS rather than a literal
+  # hash, so a point release (26.04.1, .2, ...) needs no edit here at all.
+  default     = ""
+  description = "Override the ISO checksum. Empty derives a file: URL to the release's SHA256SUMS."
 }
 
 variable "image_name" {

@@ -166,8 +166,31 @@ def md_terraform():
             continue
         parts.append(f"\n## `terraform/{mod.name}`\n\n")
         if have:
-            parts.append(run(["terraform-docs", "markdown", "table", "--no-header", str(mod)])
-                         or "_terraform-docs produced no output._\n")
+            # --hide header, not --no-header: the latter was removed and
+            # terraform-docs exits non-zero on the unknown flag, which run()
+            # turns into "" and the line below turned into a placeholder. The
+            # committed docs said "terraform-docs not installed" for so long
+            # that nobody noticed the installed path was broken too.
+            #
+            # --indent 3 so its sections nest under the "## terraform/<name>"
+            # heading written above rather than sitting level with it.
+            # --lockfile=false, or this output depends on gitignored local
+            # state. terraform-docs reads .terraform.lock.hcl when present and
+            # reports the RESOLVED provider version; without it, the constraint.
+            # The lock file is gitignored, so docs generated after a local
+            # `terraform init` said "0.8.3" while CI, which never inits, said
+            # "~> 0.8.0" -- and lint-docs could not be green in both places at
+            # once. Pinning the flag makes generation deterministic everywhere.
+            out = run(["terraform-docs", "markdown", "table", "--lockfile=false",
+                       "--hide", "header", "--indent", "3", str(mod)])
+            if not out.strip():
+                # Loud, because the quiet version of this cost a whole
+                # feature: docs that silently degrade still regenerate
+                # identically every time, so `make lint-docs` stays green
+                # while documenting nothing.
+                sys.exit(f"terraform-docs is installed but produced no output for {mod}. "
+                         f"Its flags likely changed again; run it by hand to see the error.")
+            parts.append(out)
         else:
             # Falling back rather than emitting nothing: a missing optional tool
             # should degrade the docs, not blank a whole section silently.
@@ -209,13 +232,19 @@ def main():
              "| [packer.md](packer.md) | Packer build variables |\n",
              "| [terraform.md](terraform.md) | Terraform module inputs and outputs |\n",
              "| [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |\n",
-             "| [../CONTRIBUTING.md](../CONTRIBUTING.md) | The commit message and changelog convention |\n",
+             "| [changing-config.md](changing-config.md) | Adding software and changing settings |\n",
+             "| [git-workflow.md](git-workflow.md) | Branches, pull requests and what gates a merge |\n",
+             "| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Commit message and changelog convention |\n",
              "| [../CHANGELOG.md](../CHANGELOG.md) | User-facing changes, newest first |\n",
+             "| [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |\n",
+             "| [image-contents.md](image-contents.md) | Knowing what is inside a built image |\n",
+             "| [publishing.md](publishing.md) | Uploading artifacts and moving the channel |\n",
+             "| [secrets.md](secrets.md) | What is deliberately not in this repo |\n",
              "\nThe contents of a *built image* are documented separately, in the "
              "`docs.html` rendered beside each artifact by `scripts/render-docs.py`.\n",
-             "\n`aws-s3-setup.md` and the two root documents are hand-written, not "
-             "generated -- everything else in this table is produced from source by "
-             "this script.\n"]
+             "\nThe first four are produced from source by this script. The rest are "
+             "hand-written, and live here rather than in README.md to keep that "
+             "file short enough to read on a cold return.\n"]
     written["README.md"] = "".join(index)
 
     for name, body in written.items():

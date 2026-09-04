@@ -21,7 +21,7 @@ This repo avoids that by running **one Ansible playbook in two phases**:
 | `live`  | against the machine you are on | `make apply` |
 
 Same roles, same variables, same result. The image is a *cached snapshot* of
-the state your live machine converges to — so a rebuild is for a clean slate or
+the state your running machine converges to — so a rebuild is for a clean slate or
 a new machine, not for routine changes.
 
 ```
@@ -67,7 +67,7 @@ make test                            # boot it in libvirt and check it comes up
 New here and using Claude Code? You do not have to learn the layout of
 `group_vars/all.yml` first. Open Claude Code in the repo and say what you want —
 *"add ripgrep and fzf"*, *"make the dock auto-hide"* — and the bundled
-[config-change skill](#ask-claude-recommended-especially-at-first) works out where
+[config-change skill](docs/changing-config.md#ask-claude-recommended-especially-at-first) works out where
 it goes, shows you a plan before touching anything, checks the packages exist, and
 lints before it commits.
 
@@ -94,13 +94,23 @@ next `make image` retries cleanly rather than failing with "Output directory
 
 ## Everyday commands
 
+**Coming back to this after a while, run `make doctor` first.** It checks in a
+couple of seconds whether the machine still matches what the repo assumes --
+KVM access, which `sudo` implementation is active, whether the pinned Ansible
+collections are the ones actually loading, and whether apt's sources are
+readable. Nearly every failure this repo has hit was environment drift of that
+kind rather than broken config, and each one otherwise surfaced deep inside a
+40-minute build. When something does break, `TROUBLESHOOTING.md` is organised
+by the exact error text.
+
 ```
-make image      build the golden image (qcow2 + raw)
+make doctor     check this machine still matches what the repo assumes
+make image      build the image (qcow2 + raw)
 make iso        build an unattended installer ISO
 make test       boot the built image in libvirt and verify
 make apply      converge THIS machine to the config, no reimage
 make apply-check  show what apply would change, without changing it
-make publish    upload to the artifact bucket, move the channel pointer
+make publish    upload to the artifact bucket, move the channel
 make fetch      download the latest published image
 make flash DEV=/dev/sdX   write an image to a disk
 make docs       render this build's contents as a browsable HTML report
@@ -109,253 +119,24 @@ make lint       run every linter
 make lint-commits  check commit messages against the convention
 ```
 
-## Knowing what is in an image
+## Where the rest is documented
 
-Every build records what actually got installed and renders it beside the image:
+This file stays short on purpose. Everything else lives in `docs/`, and
+`make docs-config` regenerates the reference half of it from source.
 
-| Output | What it answers |
+| Document | Covers |
 |---|---|
-| `docs.html` | Every package, version, size and **which repository it came from**, with search and filters. Published alongside the image. |
-| `workstation-manifest.json` | The same data as JSON, also kept at `/etc/workstation-manifest.json` *inside* the image, so a running machine can answer "what am I?" |
-
-```bash
-make docs                                  # open this build's report
-make docs-diff FROM=2026.08.20-a1b2 TO=2026.08.27-c3d4   # what changed between builds
-```
-
-**The build fails if the image does not match what you declared.** `roles/manifest`
-compares `group_vars/all.yml` against what `dpkg` actually reports and stops the build
-when something declared is missing — a package that silently failed to install used to
-ship unnoticed. The comparison is one-way on purpose: undeclared packages are reported,
-never failed, since that set is mostly `Recommends`.
-
-That report is also where image growth becomes attributable. Enabling Cowork pulls in
-`qemu-system-x86`, `ovmf` and `virtiofsd` through `claude-desktop`'s recommends; none of
-them are declared anywhere, and the "installed but never declared" section is where they
-show up.
-
-Reference documentation for the configuration itself lives in [`docs/`](docs/), generated
-from source by `make docs-config` and checked for staleness by CI. Each Ansible role also
-carries its own generated `README.md`.
-
-## Getting it onto a laptop
-
-Two supported paths, both ending in the same configuration:
-
-**Flash the golden image** — fastest, byte-identical to what you tested.
-
-```bash
-make fetch                                  # or use a local build
-make flash DEV=/dev/nvme0n1
-```
-
-**Install from the ISO** — when the target disk layout is unknown, or you want
-the real installer to handle drivers and partitioning.
-
-```bash
-make iso
-scripts/flash.sh --device /dev/sdX --image build/workstation-<version>-installer.iso
-```
-
-> The ISO installs **unattended and wipes the target disk with no prompting**.
-> Don't leave it in a machine you care about.
-
-### What happens on first boot
-
-A generic image cannot know what machine it landed on, so
-`workstation-firstboot.service` runs once and adapts it:
-
-1. Grows the root partition to fill the actual disk.
-2. Generates a fresh machine-id and SSH host keys.
-3. Reinstalls GRUB for this machine's firmware.
-4. Sets the hostname.
-5. Enables power management — only on real hardware, not in a VM.
-
-Then it disables itself.
-
-### Two details that make bare-metal boot work
-
-These are the non-obvious parts, and both are easy to lose in a refactor:
-
-- **`grub-install --removable`** writes the bootloader to
-  `/EFI/BOOT/BOOTX64.EFI`, the UEFI fallback path. A normal install writes an
-  NVRAM entry instead — and NVRAM lives in the motherboard, not on the disk, so
-  it does not survive `dd` onto a different machine.
-- **`MODULES=most`** in `/etc/initramfs-tools/initramfs.conf`. Ubuntu's default
-  ships only the storage drivers the *build* machine needed. On unfamiliar
-  hardware the kernel then cannot find its own root filesystem.
-
-Both are asserted in `tests/goss/workstation.yaml`, so a regression fails the
-build rather than a laptop.
-
-## Changing the configuration
-
-Almost everything lives in **`ansible/group_vars/all.yml`** — it is data, not code:
-
-```yaml
-apps_apt_base:    [ripgrep, jq, tmux, ...]   # add a line, rebuild
-apps_snap:        [{ name: code, classic: true }]
-apps_flatpak:     [com.spotify.Client]
-dev_mise_runtimes: { node: lts, python: "3.13" }
-desktop_dconf:    [{ key: /org/gnome/..., value: "'prefer-dark'" }]
-```
-
-Then either `make apply` (this machine, now) or `make image` (a new artifact).
-
-There are two ways to make that edit. If you have Claude Code, use the first one.
-
-### Ask Claude (recommended, especially at first)
-
-This repo ships a Claude Code skill at **`.claude/skills/config-change/`**. Open
-Claude Code in the repo and say what you want in plain language — no need to know
-which file or which list:
-
-```
-add duf and hyperfine, I keep apt installing them by hand
-I want Tailscale, but from their repo not the Ubuntu archive
-make the dock auto-hide and move it to the bottom
-stop installing gimp
-pin node to 22
-```
-
-It triggers on its own from phrasing like that. You can also invoke it explicitly
-with `/config-change`.
-
-It then walks a fixed path:
-
-1. **Works out where the change belongs** — which list, or whether it needs a role.
-2. **Traces what else it touches.** Adding a daemon is rarely just a package: this
-   repo builds *one* image flashed onto *many* machines, so anything a package
-   writes at install time gets shared by all of them. Installing Tailscale, for
-   instance, starts `tailscaled`, which bakes a node key into the image — so
-   `roles/seal` has to strip it.
-3. **Asks a follow-up** only when the answer changes the edit (e.g. VS Code exists
-   as a snap, a flatpak, *and* a Microsoft apt repo — those are not equivalent).
-4. **Shows you a short plan and waits.** Nothing is edited before you approve, and
-   the plan names anything from step 2 so a one-liner cannot quietly become a
-   change to a role.
-5. **Makes the edit**, matching the file's existing style.
-6. **Verifies**, then runs `make lint`.
-7. **Hands off to the `commit` skill**, which adds the changelog entry, writes a
-   Conventional Commits message, and pushes.
-
-**What step 5 is really for.** The expensive mistake in this repo is a name that
-does not exist. Nothing catches it at edit time — `apt install` dies deep inside a
-Packer run, 30–60 minutes in, after the base install and most of the provisioning.
-So the skill checks first, using `scripts/verify-change.sh`, which you can also run
-yourself:
-
-```bash
-.claude/skills/config-change/scripts/verify-change.sh apt      ripgrep neovim
-.claude/skills/config-change/scripts/verify-change.sh snap     code
-.claude/skills/config-change/scripts/verify-change.sh flatpak  com.spotify.Client
-.claude/skills/config-change/scripts/verify-change.sh repo <key-url> <base-url> <suite> [component]
-```
-
-apt names are checked against the same `Packages` indexes apt itself reads, so the
-answer is authoritative rather than a guess. It reports three outcomes, not two:
-
-| Exit | Meaning |
-|---|---|
-| 0 | verified to exist |
-| 1 | definitively does not exist (near-misses suggested) |
-| 2 | could not check — offline or host blocked |
-
-Exit 2 is deliberately **not** a pass. A checker that reports success when it
-reached nothing launders a guess into a green tick, so the skill reports that case
-as unverified rather than quietly proceeding.
-
-The skill does **not** build an image. `make image` needs KVM and takes 30–60
-minutes, so it stays your call — the skill offers it when a change looks risky and
-tells you plainly what it did and did not prove.
-
-### By hand
-
-Nothing about the skill is load-bearing — it is a shortcut, not a gate. Edit
-`ansible/group_vars/all.yml` directly, then `make lint`, then commit following
-[the commit convention](CONTRIBUTING.md#commit-messages) — `make lint-commits`
-checks the result.
-
-Worth knowing if you go this route, because all three lint clean and fail later:
-
-- **dconf values are GVariant literals.** A string needs its own inner quotes
-  (`"'prefer-dark'"`), a uint needs its type prefix (`"uint32 300"`), a boolean is
-  bare (`"true"`). Drop the inner quotes on a string and the dconf file fails to load.
-- **A vendor repo's packages go in that repo entry's own `packages:` list**, never
-  in `apps_apt_base` — otherwise apt tries to install them before the repo exists.
-- **The keyring filename is derived from the entry's `name:`.** An entry named
-  `tailscale` must say `signed-by=/etc/apt/keyrings/tailscale.gpg`. A mismatch
-  produces a signature error that reads like a network fault.
-
-Adding a third-party APT repo is data too — name, key URL, repo line, packages.
-Keys are dearmoured into `/etc/apt/keyrings` and referenced with `signed-by`, so
-no vendor key is trusted to sign anything outside its own repo.
-
-## Committing
-
-Commits follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/),
-and user-facing changes get one line in [`CHANGELOG.md`](CHANGELOG.md):
-
-```
-feat(image): add Tailscale from the upstream apt repository
-fix(iso): stop mangling xorriso's own quoted arguments
-perf(packer): drop default zstd level from 19 to 12
-```
-
-The subject states the outcome, not the technique — `fix: prevent crash on empty
-input`, not `refactor: extract validation helper`. The full rules, including the
-type and scope lists, are in [CONTRIBUTING.md](CONTRIBUTING.md).
-
-The **`commit` skill** does all of this for you — it surveys the diff, decides
-whether the change earns a changelog entry, drafts the message, shows it with the
-exact file list for approval, commits, validates, and pushes. Invoke it explicitly
-with `/commit`, or just say "commit this".
-
-To check messages yourself:
-
-```bash
-make lint-commits                          # HEAD
-make lint-commits RANGE=origin/main..HEAD  # a span
-```
-
-Nothing in CI inspects commit messages — this is a linter you run, not a gate.
-Commits made before the convention was adopted predate it and are not being
-rewritten, which is why the default is `HEAD` alone.
-
-## Secrets
-
-**Nothing personal is ever baked into an image.** No SSH private keys, no
-tokens, no shell history, no machine-id. Images get uploaded to buckets and
-written onto disks; treat every one as public.
-
-Dotfiles are handled with [chezmoi](https://chezmoi.io): the image ships only
-the binary, and your repo is pulled on first login. Set `dotfiles_repo` in
-`group_vars/all.yml`.
-
-The build account (`packer`/`packer`, hash committed in
-`packer/http/user-data`) exists only inside the build VM and is deleted by
-`roles/seal` before export. `tests/goss/workstation.yaml` asserts the machine
-identity is blank in the finished artifact.
-
-## Publishing
-
-```bash
-cd terraform/artifacts
-terraform init && terraform apply     # creates the R2 bucket
-eval "$(terraform output -raw usage)" # exports the env the scripts want
-cd ../..
-
-make publish     # upload + move the 'stable' channel pointer
-make fetch       # on another machine
-```
-
-R2 rather than S3 because egress is free — pulling a multi-GB image down a few
-times a month is the dominant cost otherwise. Any S3-compatible store works;
-the scripts use the plain `aws` CLI, only adding a custom endpoint when
-`AWS_ENDPOINT_URL` is set.
-
-Want a real AWS S3 bucket instead — no Cloudflare account, or an existing AWS
-setup? See [`docs/aws-s3-setup.md`](docs/aws-s3-setup.md).
+| [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | **Start here when something breaks** -- organised by the exact error text |
+| [docs/changing-config.md](docs/changing-config.md) | Adding software, changing settings, and the Claude skill that does it for you |
+| [docs/git-workflow.md](docs/git-workflow.md) | Branches, pull requests, worktrees, and what gates a merge |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Commit message convention, and how the changelog is kept |
+| [CHANGELOG.md](CHANGELOG.md) | User-facing changes, newest first |
+| [docs/hardware-install.md](docs/hardware-install.md) | Getting an image onto a laptop, and what happens on first boot |
+| [docs/image-contents.md](docs/image-contents.md) | Knowing what is actually inside a built image |
+| [docs/publishing.md](docs/publishing.md) | Uploading artifacts and moving the channel |
+| [docs/secrets.md](docs/secrets.md) | What is deliberately not in this repo, and where it goes instead |
+| [docs/configuration.md](docs/configuration.md) | Generated: every setting in `group_vars/all.yml` |
+| [docs/roles.md](docs/roles.md) | Generated: index of the Ansible roles |
 
 ## Repository layout
 
@@ -369,7 +150,13 @@ iso/                         autoinstall seed for the installer ISO
 terraform/artifacts/         image bucket
 terraform/testlab/           throwaway VM for verifying a build
 tests/goss/                  assertions run inside the image during the build
-scripts/                     flash, fetch, publish, build-iso, lint-commit-msg
+scripts/                     flash, fetch, publish, build-iso
+scripts/doctor.sh            `make doctor` -- environment preflight
+scripts/lint-commit-msg.py   `make lint-commits` -- commit message convention
+docs/                        reference docs; the generated half is rebuilt by
+                             `make docs-config` and CI fails if it drifts
+TROUBLESHOOTING.md           failures by error text
+versions.env                 tool versions CI installs
 .claude/skills/config-change/  Claude Code skill for making a config change:
                              SKILL.md, scripts/verify-change.sh, evals/
 .claude/skills/commit/       Claude Code skill for committing: changelog entry,
@@ -393,6 +180,11 @@ CLAUDE.md                    what a Claude session needs to know here
 
 - **`lint.yml`** runs on every push: yamllint, ansible-lint, playbook syntax
   check in both phases, `packer validate`, `terraform validate`, shellcheck.
+- **`apply.yml`** runs the live half of the playbook for real, on a runner,
+  whenever `ansible/` changes and weekly. It then runs it a *second* time and
+  reports how much changed — a playbook that never settles is broken in a way
+  a single run cannot show. This is the only CI job that executes the config
+  rather than analysing it.
 - **`build.yml`** runs on a tag, on demand, or weekly. It is not run per-commit
   on purpose — a full build is 30-60 minutes and several GB of upload.
 
