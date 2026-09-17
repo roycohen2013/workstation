@@ -185,10 +185,18 @@
       # it says. xrandr reports the XWayland screen, which GNOME always runs;
       # if it is unavailable the base image's own size is used, which is no
       # worse than before.
-      geom=$(xrandr --current 2>/dev/null | awk '/\*/ {print $1; exit}')
-      if [ -z "$geom" ]; then
-          geom=$(magick identify -format '%wx%h' "$BASE")
-      fi
+      # `|| geom=""` is load-bearing. Under `set -euo pipefail` a bare
+      # assignment from a failing pipeline aborts the script, so without it
+      # the fallback below is unreachable: on a machine with no xrandr --
+      # which nothing in this repo installs -- the renderer would exit 127
+      # every time the timer fired and the wallpaper would never be stamped
+      # at all, which is worse than the cropping this change set out to fix.
+      # The case guard covers the same ground for a malformed reading.
+      geom=$(xrandr --current 2>/dev/null | awk '/\*/ {print $1; exit}') || geom=""
+      case "$geom" in
+          [0-9]*x[0-9]*) ;;
+          *) geom=$(magick identify -format '%wx%h' "$BASE") ;;
+      esac
 
       mkdir -p "$OUT_DIR"
 
@@ -201,7 +209,7 @@
 
       tmp=$(mktemp "$OUT_DIR/.desktop-info.XXXXXX.png")
       trap 'rm -f "$tmp"' EXIT
-      # Drawn twice: a dark copy offset by one pixel, then the light text over
+      # Drawn twice: a dark copy offset by two pixels, then the light text over
       # it, so it stays readable on a pale wallpaper as well as a dark one.
       magick "$BASE" \
           -resize "${geom}^" -gravity center -extent "$geom" \
