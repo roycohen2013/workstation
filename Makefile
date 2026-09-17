@@ -121,7 +121,13 @@ image: check-tools init deps ## Build the image (qcow2 + raw)
 	  -var "image_name=$(IMAGE_NAME)" \
 	  -var "output_dir=$(BUILD_DIR)" \
 	  $(ARGS) \
-	  packer/
+	  packer/ || exit $$?
+	@# `|| exit $$?` is load-bearing. This Makefile sets .ONESHELL, so the whole
+	@# recipe is one shell and make reads only the LAST command's status -- which
+	@# is the `|| true` below, always zero. Without this, a packer build that
+	@# errored reported success to CI, printed "Built ..." underneath "no
+	@# artifacts were created", and only went red because the workflow's summary
+	@# step tripped over the missing directory afterwards.
 	@echo
 	@echo "Built $(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).{qcow2,raw}.zst"
 	@ls -lh $(ARTIFACT_DIR)/ 2>/dev/null || true

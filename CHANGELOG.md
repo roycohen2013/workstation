@@ -85,3 +85,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - `make check-tools` reports missing `kvm` group membership up front, rather than
   letting the build fail 45 minutes later with a generic QEMU error.
 - `make lint` survives a CRLF checkout and no longer crashes on unexpected exit codes.
+- `make image` now reports failure when the build fails. A packer error was
+  swallowed, so a run that produced no image at all could still be recorded as a
+  success, and CI only went red because a later step tripped over the missing
+  output directory.

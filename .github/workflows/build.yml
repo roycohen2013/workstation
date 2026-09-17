@@ -69,14 +69,24 @@ jobs:
 
       - name: Summarise artifacts
         run: |
+          # Say which directory is missing rather than letting `ls` fail with a
+          # bare exit 2. When `make image` wrongly reported success, that opaque
+          # code was the only thing that turned the job red, and it buried the
+          # real error (an ISO download that timed out) under a shell error from
+          # a cosmetic step.
+          dir="build/workstation-${{ steps.version.outputs.version }}"
+          if [ ! -d "$dir" ]; then
+            echo "::error::$dir does not exist -- the build produced no artifacts"
+            exit 1
+          fi
           {
             echo "### Image \`${{ steps.version.outputs.version }}\`"
             echo
             echo '```'
-            ls -lh "build/workstation-${{ steps.version.outputs.version }}/"
+            ls -lh "$dir/"
             echo '```'
             echo
-            cat "build/workstation-${{ steps.version.outputs.version }}/SHA256SUMS"
+            cat "$dir/SHA256SUMS"
           } >> "$GITHUB_STEP_SUMMARY"
 
       # Checksums and the manifest are small and worth keeping on the run even
