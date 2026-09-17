@@ -93,3 +93,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   recipe. `lint-packer` was ignoring `packer fmt -check` violations entirely,
   because a passing `packer validate` ran after it and only the last command's
   result was read.
+- `make apply` no longer fails when a single package host blinks. apt was
+  configured with no retries at all, so one refused connection or DNS blip
+  anywhere in `sources.list.d` failed the whole converge; it now retries a
+  failed download, configurable with `base_apt_retries`.

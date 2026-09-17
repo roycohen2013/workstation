@@ -105,6 +105,14 @@ NorthEast, NorthWest, SouthEast, SouthWest.
 Inset from that corner, in pixels. Only meaningful because the renderer
 fits the image to the screen first -- see the note in roles/desktop.
 
+### `base_apt_retries`
+
+`3`
+
+How many times apt retries an individual failed download. Ubuntu ships no
+default, which means zero: one refused connection or DNS blip anywhere in
+sources.list.d fails the whole `apt-get update`, and with it `make apply`.
+
 ### `base_bash_histsize`
 
 `50000`

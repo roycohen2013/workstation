@@ -22,6 +22,15 @@
     create: true
     mode: "0644"
 
+# Before the first apt task, and before the apps role adds any repository:
+# apt's own retry is what makes every later fetch survive a blip, rather than
+# each Ansible task having to grow its own retry loop.
+- name: Make apt retry a failed download
+  ansible.builtin.copy:
+    content: "Acquire::Retries \"{{ base_apt_retries }}\";\n"
+    dest: /etc/apt/apt.conf.d/80-workstation-retries
+    mode: "0644"
+
 - name: Install base packages
   ansible.builtin.apt:
     name: "{{ apps_apt_base }}"
