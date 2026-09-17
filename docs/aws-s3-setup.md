@@ -84,10 +84,11 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
   restrict_public_buckets = true
 }
 
-# Only cleans up abandoned multipart uploads. Build retention (keeping the
-# newest N images) is handled by scripts/publish-image.sh itself -- a bucket
-# lifecycle rule that also expired objects would be a second, uncoordinated
-# place deciding what to delete, and the two would eventually disagree.
+# Only cleans up abandoned multipart uploads. Build retention (the newest N
+# images, plus any a channel still points at) is handled by
+# scripts/publish-image.sh itself -- a bucket lifecycle rule that also expired
+# objects would be a second, uncoordinated place deciding what to delete, it
+# cannot see the channel pointers, and the two would eventually disagree.
 resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
   bucket = aws_s3_bucket.artifacts.id
   rule {

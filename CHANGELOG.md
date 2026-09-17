@@ -99,6 +99,12 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   failed download, configurable with `base_apt_retries`. Fetching the vendor
   signing keys retries too, since that step contacts every vendor on every
   run.
+- `make publish` no longer deletes the image a channel still points at.
+  Retention protected only the version being published, so a channel parked on
+  an older build could be pruned out from under it and `make fetch` on that
+  channel would stop resolving. Every channel's current image is now kept
+  however old it is, and a publish that cannot read the channel pointers prunes
+  nothing rather than guess.
 - The image build produces its artifacts again. Its post-processor ran under
   dash, which has no `pipefail`, so it aborted on its own first line before
   converting, compressing, rendering docs or writing checksums -- leaving an
