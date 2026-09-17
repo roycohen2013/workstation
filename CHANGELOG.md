@@ -96,4 +96,6 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - `make apply` no longer fails when a single package host blinks. apt was
   configured with no retries at all, so one refused connection or DNS blip
   anywhere in `sources.list.d` failed the whole converge; it now retries a
-  failed download, configurable with `base_apt_retries`.
+  failed download, configurable with `base_apt_retries`. Fetching the vendor
+  signing keys retries too, since that step contacts every vendor on every
+  run.

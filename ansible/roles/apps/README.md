@@ -52,7 +52,12 @@ the file is still there. Deleting it made this task, and the dearmour and
 apt_repository tasks below it, report changed on every single converge; the
 CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
 also survives a reboot. This is public key material, a few KB per vendor. |
-| Fetch repository signing keys | ansible.builtin.get_url | False |  |
+| Fetch repository signing keys | ansible.builtin.get_url | False | Retried rather than left to fail: get_url contacts every one of these URLs
+on every converge to compare against the cached copy, so a single vendor
+host blinking -- one DNS EAI_AGAIN out of eight -- failed the whole run.
+Deliberately NOT falling back to the cached key when a host stays
+unreachable: that would silently keep using a key the vendor may have
+rotated or revoked, which is the one failure here worth being loud about. |
 | Install repository signing keys (dearmoured) | ansible.builtin.command | True | Key handling is two independent choices, because vendors differ on both:
 key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
 key_armoured whether to copy the .asc verbatim or dearmour it first
