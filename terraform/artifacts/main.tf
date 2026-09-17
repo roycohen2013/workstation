@@ -53,4 +53,6 @@ resource "cloudflare_r2_bucket" "artifacts" {
 # R2's lifecycle API is thinner than S3's and its Terraform surface has moved
 # between provider majors, so pinning image retention to it would make this
 # config fragile for very little gain. scripts/publish-image.sh prunes to the
-# newest N builds instead -- one place, one behaviour, no provider coupling.
+# newest N builds instead, plus any build a channel still points at -- one
+# place, one behaviour, no provider coupling. A lifecycle rule could not make
+# that exception: it cannot see the channel pointers.
