@@ -31,7 +31,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - BalenaEtcher, pinned to a GitHub release and always launched with `--no-sandbox`
   so it can write removable drives.
 - fastfetch.
-- The desktop wallpaper is stamped with the machine's hostname and IP address.
+- The desktop wallpaper is stamped with the machine's hostname and IP address, in
+  the top right in bold, and rendered at the screen's own resolution so GNOME's
+  zoom-to-fill does not crop the text off the edge of the display.
 - A colour prompt and a larger shell history in the image's `bashrc`.
 - `make doctor` checks whether this machine still matches what the repo assumes —
   KVM access, which `sudo` implementation is active, whether the pinned Ansible

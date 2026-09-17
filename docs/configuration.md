@@ -85,11 +85,25 @@ on every refresh.
 
 ### `desktop_info_font`
 
-`/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf`
+`/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf`
 
 ### `desktop_info_pointsize`
 
-`20`
+`32`
+
+### `desktop_info_gravity`
+
+`NorthEast`
+
+Top right. Any ImageMagick gravity works, but corners are the sane choices:
+NorthEast, NorthWest, SouthEast, SouthWest.
+
+### `desktop_info_inset`
+
+`60`
+
+Inset from that corner, in pixels. Only meaningful because the renderer
+fits the image to the screen first -- see the note in roles/desktop.
 
 ### `base_bash_histsize`
 
