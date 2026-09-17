@@ -5,7 +5,7 @@
       "id": 0,
       "name": "add-apt-packages",
       "prompt": "can you throw duf and hyperfine onto the image? i keep apt installing them by hand every time i set up a fresh machine",
-      "expected_output": "Both packages added to an appropriate apt list in ansible/group_vars/all.yml (base or dev, either is defensible), verified to exist in the Ubuntu archive, lint passes, committed and pushed.",
+      "expected_output": "Both packages added to an appropriate apt list in ansible/group_vars/all.yml (base or dev, either is defensible), verified to exist in the Ubuntu archive, lint passes, CHANGELOG.md updated, committed with a Conventional Commits message and pushed.",
       "files": [],
       "assertions": [
         "Both 'duf' and 'hyperfine' present in an apt package list (apps_apt_base or apps_apt_dev)",
@@ -13,6 +13,9 @@
         "Package existence was actually verified against the Ubuntu archive before committing",
         "make lint passes on the resulting tree",
         "The change was committed AND pushed to the remote",
+        "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
+        "A CHANGELOG.md entry was added under [Unreleased] > Added, since adding packages is user-facing",
+        "The commit carries no attribution or generated-by trailer lines",
         "No unrelated files were modified"
       ]
     },
@@ -32,7 +35,9 @@
         "All added YAML lines stay within the 120-character yamllint limit (folded scalar used)",
         "make lint passes on the resulting tree",
         "Identifies that installing tailscale starts tailscaled and bakes a node key into the image",
-        "Handles that state: roles/seal strips it, or the daemon is kept from starting during the build"
+        "Handles that state: roles/seal strips it, or the daemon is kept from starting during the build",
+        "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
+        "A CHANGELOG.md entry was added under [Unreleased], since adding software is user-facing"
       ]
     },
     {
@@ -47,7 +52,9 @@
         "Boolean dconf values are bare true/false without inner quotes",
         "The dconf keys used belong to a real schema (dash-to-dock or dash-to-panel)",
         "make lint passes on the resulting tree",
-        "The change was committed"
+        "The change was committed",
+        "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
+        "A CHANGELOG.md entry was added under [Unreleased] > Changed, since a visible desktop default changed"
       ]
     },
     {

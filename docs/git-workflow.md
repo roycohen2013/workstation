@@ -17,6 +17,23 @@ One logical change per branch. Branches are squash-merged, so a branch becomes a
 single commit on `main`; anything worth remembering from the work — a bug found
 on the way, an alternative rejected — belongs in the squash body.
 
+## Commit messages
+
+Commits follow Conventional Commits — `feat(image): add Obsidian from Flathub`.
+The full convention, the type and scope lists, and how `CHANGELOG.md` is kept
+are in [CONTRIBUTING.md](../CONTRIBUTING.md). Check a message with
+`make lint-commits`; nothing in CI gates on it.
+
+**Because branches are squash-merged, the pull request title becomes the commit
+on `main`** — so the title is what has to follow the convention, not just the
+commits on the branch. `gh pr create --fill` takes the title from the branch's
+single commit, which carries a conventional subject through by itself; a branch
+with several commits takes its title from the first one only, so check it before
+merging.
+
+The `commit` skill (`.claude/skills/commit/`, or `/commit`) writes all of this —
+changelog entry included — and is the sanctioned path for an agent working here.
+
 ## Working on several at once
 
 Use a worktree per branch rather than switching one checkout back and forth:
