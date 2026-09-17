@@ -99,3 +99,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   failed download, configurable with `base_apt_retries`. Fetching the vendor
   signing keys retries too, since that step contacts every vendor on every
   run.
+- The image build produces its artifacts again. Its post-processor ran under
+  dash, which has no `pipefail`, so it aborted on its own first line before
+  converting, compressing, rendering docs or writing checksums -- leaving an
+  uncompressed qcow2 and no release artifacts at all.
