@@ -89,3 +89,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   swallowed, so a run that produced no image at all could still be recorded as a
   success, and CI only went red because a later step tripped over the missing
   output directory.
+- `make` targets no longer report success when a command fails partway through a
+  recipe. `lint-packer` was ignoring `packer fmt -check` violations entirely,
+  because a passing `packer validate` ran after it and only the last command's
+  result was read.

@@ -6,6 +6,13 @@
 # `make help` lists everything.
 
 SHELL := /bin/bash
+# -e and pipefail, because .ONESHELL below makes each recipe a single shell and
+# make then reads only its LAST command's status. Without these, any command
+# that fails mid-recipe is invisible: `make image` reported success after packer
+# errored, and lint-packer ignored `packer fmt -check` entirely because a passing
+# `packer validate` followed it. Two recipes need an explicit `|| true` to stay
+# correct under this -- both are marked where they are.
+.SHELLFLAGS := -e -o pipefail -c
 .DEFAULT_GOAL := help
 .ONESHELL:
 
@@ -49,8 +56,11 @@ BECOME_EXE := $(if $(SUDO_WS),-e ansible_become_exe=$(SUDO_WS),)
 help: ## Show this help
 	@echo "Workstation image build"
 	@echo
+	@# `|| true`: under .SHELLFLAGS pipefail, a grep that matches nothing would
+	@# abort `make help` itself rather than just printing a shorter list.
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' \
+	  || true
 	@echo
 	@echo "  Version for this build: $(VERSION)"
 
@@ -294,7 +304,10 @@ lint-shell:
 	@# Collected with find rather than globs: an unmatched glob is passed
 	# through literally and shellcheck then fails on a path that does not
 	# exist, which reads like a broken lint rather than a missing directory.
-	sh_files=$$(find scripts tests .claude -name '*.sh' 2>/dev/null | sort)
+	@# `|| true`: find exits non-zero when .claude is missing, and under
+	@# .SHELLFLAGS pipefail that would abort here -- reintroducing exactly the
+	@# "lint-shell on trees without a .claude directory" bug already fixed once.
+	sh_files=$$(find scripts tests .claude -name '*.sh' 2>/dev/null | sort) || true
 	if [ -z "$$sh_files" ]; then echo "lint-shell: no shell scripts found"; exit 0; fi
 	shellcheck $$sh_files
 
