@@ -52,7 +52,13 @@ It then walks a fixed path:
 6. **Verifies**, then runs `make lint`.
 7. **Commits and pushes**, with a message explaining *why*, not just what.
 
-**What step 5 is really for.** The expensive mistake in this repo is a name that
+Steps 1 and 2 are read-only research, so Claude runs them in a subagent where one is
+available and keeps only the answer in the main conversation. That is why you may see it
+spawn a helper before it shows you a plan. Nothing else is delegated: the plan, the edit,
+the verification and the commit all happen in the session you are talking to, and the
+path above is the same either way.
+
+**What step 6 is really for.** The expensive mistake in this repo is a name that
 does not exist. Nothing catches it at edit time — `apt install` dies deep inside a
 Packer run, 30–60 minutes in, after the base install and most of the provisioning.
 So the skill checks first, using `scripts/verify-change.sh`, which you can also run

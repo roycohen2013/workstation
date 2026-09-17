@@ -31,7 +31,84 @@ exists takes two seconds and turns that into an instant fix.
 That is what `scripts/verify-change.sh` is for. Run it on every change that names an
 external artifact.
 
+## Run steps 1 and 2 in a subagent
+
+Locating the key and tracing the consequences is **read-only research**. It reads
+`ansible/group_vars/all.yml` end to end, several roles, `tests/goss/workstation.yaml`
+and sometimes the ISO templates — and almost none of that is needed again once it has
+produced an answer. Done inline, "add htop" spends most of a context window before the
+first character is edited. Done in a subagent, this session keeps the answer instead of
+the search.
+
+Send both steps to **one** agent in **one** call. They read the same files, so splitting
+them reads `all.yml` twice and doubles the cost the split was meant to avoid.
+
+Prefer the `Explore` agent type where the environment offers it: it has no edit tools,
+so it cannot change the tree while you are still deciding what the change should be.
+`general-purpose` is a fine second choice. **If no subagent is available, do steps 1 and
+2 inline exactly as they are written below.** This is an optimisation, not a new
+requirement — a missing agent type must never become a skipped trace.
+
+Never give the research agent an isolated worktree. It is reading the tree the change
+will land in, and a throwaway copy makes its line numbers wrong the moment you edit.
+
+Give it the request in the user's own words, and ask for the answer in the shape Step 4
+will need:
+
+```
+Research a configuration change for this workstation image repo. Read only —
+do not edit, stage or commit anything.
+
+The user asked for, verbatim: "<their exact words>"
+
+Answer these five, in this order, and nothing else:
+
+1. PLACEMENT — which key in ansible/group_vars/all.yml does this belong under,
+   and why that one rather than the neighbouring candidates? Quote the
+   surrounding lines so the edit can match the file's style. Say so explicitly
+   if it needs a role rather than data.
+2. MACHINE-SPECIFIC STATE — would installing this start a daemon or write
+   identity (node keys, host keys, instance IDs, licence activation) that gets
+   baked into the image and then shared by every machine flashed from it? Read
+   roles/seal and roles/firstboot for how comparable state is handled today.
+3. PHASE — does this need to be true in the image, or only on a running
+   machine? Check for `workstation_phase == 'live'` on anything related.
+4. EXISTING ASSERTIONS — does tests/goss/workstation.yaml assert the old
+   behaviour, and so turn this into a red build? Quote the assertion if it does.
+5. EXISTENCE — for anything external this names, run
+   .claude/skills/config-change/scripts/verify-change.sh and report the exact
+   exit code: 0 verified, 1 does not exist, 2 could not check. Report a 2 as
+   "could not check" — never as verified.
+
+At most 15 lines. Cite file paths with line numbers. Where a question has no
+consequence, answer "nothing" rather than padding it.
+```
+
+### The report is evidence, not a decision
+
+What comes back is prose from a model that read the repo once. Every load-bearing claim
+in it — a path, a line number, an exit code — is checkable here in seconds, and the
+decision stays yours. Check anything that would change the plan.
+
+If the report is thin, vague, or answers a question you did not ask, do the trace
+yourself rather than passing its gaps into the plan. A plan whose **Also touches** line
+came from an agent that never opened `roles/seal` is worse than one that says nothing,
+because it reads as though someone checked.
+
+### What never leaves this session
+
+| Step | Why |
+|---|---|
+| 3 — ask | the user answers, and a subagent cannot reach them |
+| 4 — plan and approval | the approval is the user's, and an agent's report is never shown to them |
+| 5 — edit | the edit belongs in this checkout, as one reviewable diff |
+| 6 — verify | an exit code has to be read by whoever reports it, not relayed |
+| 7 — commit | the `commit` skill shows a message and waits; a subagent cannot be waited on |
+
 ## Step 1 — Locate where the change belongs
+
+Delegated to the research agent above, together with Step 2. What follows is what that
+agent is looking for — and what you do yourself when there is no agent to ask.
 
 Find the right key first. Guessing wrong here means a change that lints clean and
 silently does nothing.
@@ -68,6 +145,10 @@ Two placements deserve a second thought:
   `linux-firmware` is a laptop with no Wi-Fi. Don't "optimise" it away.
 
 ## Step 2 — Trace what else the change touches
+
+Delegated with Step 1, in the same call. The three questions below are questions 2 to 4
+of that prompt; what follows is the reasoning behind them, and the fallback when no
+subagent is available.
 
 Routing a change to the right list is the easy half. What bites is the
 consequence that lands somewhere the placement table never points.
@@ -241,6 +322,11 @@ Read the exit code, because the three outcomes are not interchangeable:
 
 Exit 2 is not a pass. Reporting an unreachable check as "verified" launders a guess
 into a green tick, which is worse than having run no check at all.
+
+**Run these here even if the research agent already ran them.** Tier 1 does not depend
+on the edit, so re-running costs two seconds, and it is the whole difference between
+reporting an exit code you read and one you were told about. If the two disagree, the
+one you ran is the one that counts.
 
 **Tier 2 — does the repo still lint?**
 

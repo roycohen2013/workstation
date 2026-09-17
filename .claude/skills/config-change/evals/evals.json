@@ -16,7 +16,8 @@
         "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
         "A CHANGELOG.md entry was added under [Unreleased] > Added, since adding packages is user-facing",
         "The commit carries no attribution or generated-by trailer lines",
-        "No unrelated files were modified"
+        "No unrelated files were modified",
+        "The package-existence exit code was read in the session that committed, not relayed from a subagent's summary of it"
       ]
     },
     {
@@ -37,7 +38,8 @@
         "Identifies that installing tailscale starts tailscaled and bakes a node key into the image",
         "Handles that state: roles/seal strips it, or the daemon is kept from starting during the build",
         "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
-        "A CHANGELOG.md entry was added under [Unreleased], since adding software is user-facing"
+        "A CHANGELOG.md entry was added under [Unreleased], since adding software is user-facing",
+        "If placement and tracing were delegated to a subagent, the trace findings still reached the plan: delegation did not drop the tailscaled node-key consequence"
       ]
     },
     {
@@ -54,7 +56,8 @@
         "make lint passes on the resulting tree",
         "The change was committed",
         "The commit subject follows Conventional Commits, using an allowed type and (if scoped) an allowed scope",
-        "A CHANGELOG.md entry was added under [Unreleased] > Changed, since a visible desktop default changed"
+        "A CHANGELOG.md entry was added under [Unreleased] > Changed, since a visible desktop default changed",
+        "A plan was shown and approved before any file was edited, regardless of where the research ran"
       ]
     },
     {
