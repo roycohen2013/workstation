@@ -93,3 +93,13 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   recipe. `lint-packer` was ignoring `packer fmt -check` violations entirely,
   because a passing `packer validate` ran after it and only the last command's
   result was read.
+- `make apply` no longer fails when a single package host blinks. apt was
+  configured with no retries at all, so one refused connection or DNS blip
+  anywhere in `sources.list.d` failed the whole converge; it now retries a
+  failed download, configurable with `base_apt_retries`. Fetching the vendor
+  signing keys retries too, since that step contacts every vendor on every
+  run.
+- The image build produces its artifacts again. Its post-processor ran under
+  dash, which has no `pipefail`, so it aborted on its own first line before
+  converting, compressing, rendering docs or writing checksums -- leaving an
+  uncompressed qcow2 and no release artifacts at all.

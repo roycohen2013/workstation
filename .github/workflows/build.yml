@@ -64,8 +64,43 @@ jobs:
         id: version
         run: echo "version=$(make version)" >> "$GITHUB_OUTPUT"
 
+      # Packer's own downloader has no resume: it gets one attempt at ~2.9GB
+      # and gives up at a 30-minute deadline, which is how the 7 and 14
+      # September builds died. curl retries and resumes from where it stopped
+      # (releases.ubuntu.com advertises Accept-Ranges and serves 206), so a
+      # stalled transfer costs a retry rather than the whole build.
+      - name: Fetch the installer ISO
+        id: iso
+        run: |
+          iso_dir="$RUNNER_TEMP/iso"
+          mkdir -p "$iso_dir"
+          name="ubuntu-${UBUNTU_RELEASE}-live-server-amd64.iso"
+          base="https://releases.ubuntu.com/${UBUNTU_RELEASE}"
+          iso="$iso_dir/$name"
+
+          start=$(date +%s)
+          curl --fail --location --show-error --silent \
+               --retry 5 --retry-all-errors --retry-delay 5 \
+               --continue-at - -o "$iso" "$base/$name"
+          elapsed=$(( $(date +%s) - start ))
+          bytes=$(stat -c %s "$iso")
+          echo "downloaded $bytes bytes in ${elapsed}s" \
+               "($(( bytes / (elapsed > 0 ? elapsed : 1) / 1024 / 1024 )) MB/s)"
+
+          # Verify against the same SHA256SUMS Packer would have used, so a
+          # resumed or truncated transfer cannot be handed to the build.
+          curl --fail --location --silent --retry 5 --retry-all-errors \
+               -o "$iso_dir/SHA256SUMS" "$base/SHA256SUMS"
+          ( cd "$iso_dir" && grep " \*\?$name\$" SHA256SUMS | sha256sum -c - )
+
+          echo "path=$iso" >> "$GITHUB_OUTPUT"
+        env:
+          UBUNTU_RELEASE: "26.04"
+
       - name: Build image
-        run: make image VERSION=${{ steps.version.outputs.version }}
+        run: |
+          make image VERSION=${{ steps.version.outputs.version }} \
+            ARGS='-var iso_url=file://${{ steps.iso.outputs.path }}'
 
       - name: Summarise artifacts
         run: |

@@ -34,6 +34,9 @@ Description: Locale, timezone, user account, kernel tuning and a portable initra
 | Ensure locale is generated | community.general.locale_gen | False |  |
 | Set system locale | ansible.builtin.copy | False |  |
 | Configure console keyboard layout | ansible.builtin.lineinfile | False |  |
+| Make apt retry a failed download | ansible.builtin.copy | False | Before the first apt task, and before the apps role adds any repository:
+apt's own retry is what makes every later fetch survive a blip, rather than
+each Ansible task having to grow its own retry loop. |
 | Install base packages | ansible.builtin.apt | False |  |
 | Remove unwanted packages | ansible.builtin.apt | True |  |
 | Upgrade all packages | ansible.builtin.apt | False |  |

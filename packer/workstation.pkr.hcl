@@ -181,6 +181,14 @@ build {
   #   qcow2 -> VMs (libvirt/QEMU; convertible to vmdk/vdi)
   #   raw   -> dd straight onto a laptop's NVMe
   post-processor "shell-local" {
+    # Packer runs an inline shell-local under `/bin/sh -e` by default, and
+    # /bin/sh is dash on Ubuntu. dash has no `pipefail`, so `set -euo pipefail`
+    # below aborted this script on its own first line with "Illegal option -o
+    # pipefail" and exit 2 -- before converting, compressing, rendering docs or
+    # writing SHA256SUMS. The build still reported a 19G qcow2 and no artifacts.
+    # It went unnoticed because the two runs before it never got this far: they
+    # died earlier, downloading the ISO.
+    inline_shebang = "/bin/bash -e"
     inline = [
       "set -euo pipefail",
       "OUT='${var.output_dir}/${local.artifact_name}'",

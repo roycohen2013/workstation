@@ -40,6 +40,12 @@
     state: directory
     mode: "0755"
 
+# Retried rather than left to fail: get_url contacts every one of these URLs
+# on every converge to compare against the cached copy, so a single vendor
+# host blinking -- one DNS EAI_AGAIN out of eight -- failed the whole run.
+# Deliberately NOT falling back to the cached key when a host stays
+# unreachable: that would silently keep using a key the vendor may have
+# rotated or revoked, which is the one failure here worth being loud about.
 - name: Fetch repository signing keys
   ansible.builtin.get_url:
     url: "{{ item.key_url }}"
@@ -48,6 +54,10 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
+  register: apps_key_fetch
+  until: apps_key_fetch is succeeded
+  retries: 3
+  delay: 5
 
 # Key handling is two independent choices, because vendors differ on both:
 #   key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
