@@ -261,21 +261,35 @@ lint-clean and the package exists, and that no image was built.
 
 ## Step 7 — Commit and push
 
-Commit only after verification passes. Stage the specific files changed, not `-A`.
+Commit only after verification passes, then **use the `commit` skill** — it owns the
+message format, the changelog, staging, validation and the push. Do not hand-write a
+`git commit` here; a second commit convention living in this file is exactly how the
+two drift apart.
 
-Write a subject line naming the actual change, and a body explaining *why* — which
-source was chosen and what was rejected. Six months later that reasoning is the only
-thing that explains an odd-looking entry.
+Two things to carry into it from the work above:
 
-```
-Add Tailscale from the upstream apt repository
+- **A package added or removed is user-facing**, so it earns a `CHANGELOG.md` entry
+  under `Added`, `Changed` or `Removed`. Scope it `image` — that is what the reader
+  cares about:
 
-Ubuntu's archive package lags upstream by several months, and Tailscale
-expects to self-update against its own repo.
+  ```
+  feat(image): add Tailscale from the upstream apt repository
+  ```
 
-Verified: repo key, suite and component resolve for resolute; make lint
-passes. No image build.
-```
+- **Say what was rejected and why** in the body, briefly. Which source was chosen over
+  which alternative is the only thing that explains an odd-looking entry six months
+  later:
+
+  ```
+  Ubuntu's archive package lags upstream by months, and Tailscale expects
+  to self-update against its own repo.
+  ```
+
+The Step 6 verification report goes to the user in chat, not into the commit body. Tell
+them what was verified, what was not, and specifically whether an image was built —
+"verified" must never be heard as "built and booted".
+
+### Where it goes
 
 **Never commit to `main`.** Every change goes on its own branch and reaches
 `main` through a pull request, which is what lets several changes be worked on at
@@ -284,12 +298,16 @@ this, but do not rely on the rule to catch you.
 
 ```bash
 git switch -c "change/<slug>"          # fix/<slug> for repo or CI bugs, not the image
-git add <the specific files>
-git commit                             # subject names the change, body says why
-git push -u origin "change/<slug>"
+# then hand off to the `commit` skill: it stages the specific files, writes the
+# conventional message, updates CHANGELOG.md and pushes
 gh pr create --fill
 gh pr merge --squash --auto            # lands itself once lint and apply are green
 ```
+
+**The PR title becomes the commit on `main`,** because branches are squash-merged.
+`--fill` takes that title from the branch's single commit, so a conventional commit
+subject carries through by itself — but check it, since a branch with several commits
+gets a title from the first one only.
 
 `--auto` rather than merging directly: `apply` converges a real machine twice and
 takes twelve to fifteen minutes, so waiting on it interactively wastes the
@@ -299,7 +317,8 @@ a red check if they do not.
 One logical change per branch. Squash-merging means the branch becomes a single
 commit on `main`, so if the work uncovered something worth recording -- a bug
 found on the way, an alternative rejected -- it belongs in the squash body, not
-in a commit that will be collapsed.
+in a commit that will be collapsed. Keep that body to the convention too: the
+squash body is the commit body once it lands.
 
 Working on several changes at once means a worktree each, so the branches do not
 fight over one checkout:

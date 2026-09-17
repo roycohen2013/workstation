@@ -13,6 +13,8 @@ Generated from source by `make docs-config`. CI regenerates these and fails if t
 | [aws-s3-setup.md](aws-s3-setup.md) | Using a real AWS S3 bucket instead of the default R2 one |
 | [changing-config.md](changing-config.md) | Adding software and changing settings |
 | [git-workflow.md](git-workflow.md) | Branches, pull requests and what gates a merge |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Commit message and changelog convention |
+| [../CHANGELOG.md](../CHANGELOG.md) | User-facing changes, newest first |
 | [hardware-install.md](hardware-install.md) | Getting an image onto a laptop |
 | [image-contents.md](image-contents.md) | Knowing what is inside a built image |
 | [publishing.md](publishing.md) | Uploading artifacts and moving the channel |

@@ -116,6 +116,7 @@ make flash DEV=/dev/sdX   write an image to a disk
 make docs       render this build's contents as a browsable HTML report
 make docs-config  regenerate the committed reference docs under docs/
 make lint       run every linter
+make lint-commits  check commit messages against the convention
 ```
 
 ## Where the rest is documented
@@ -128,6 +129,8 @@ This file stays short on purpose. Everything else lives in `docs/`, and
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | **Start here when something breaks** -- organised by the exact error text |
 | [docs/changing-config.md](docs/changing-config.md) | Adding software, changing settings, and the Claude skill that does it for you |
 | [docs/git-workflow.md](docs/git-workflow.md) | Branches, pull requests, worktrees, and what gates a merge |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Commit message convention, and how the changelog is kept |
+| [CHANGELOG.md](CHANGELOG.md) | User-facing changes, newest first |
 | [docs/hardware-install.md](docs/hardware-install.md) | Getting an image onto a laptop, and what happens on first boot |
 | [docs/image-contents.md](docs/image-contents.md) | Knowing what is actually inside a built image |
 | [docs/publishing.md](docs/publishing.md) | Uploading artifacts and moving the channel |
@@ -149,12 +152,19 @@ terraform/testlab/           throwaway VM for verifying a build
 tests/goss/                  assertions run inside the image during the build
 scripts/                     flash, fetch, publish, build-iso
 scripts/doctor.sh            `make doctor` -- environment preflight
+scripts/lint-commit-msg.py   `make lint-commits` -- commit message convention
 docs/                        reference docs; the generated half is rebuilt by
                              `make docs-config` and CI fails if it drifts
 TROUBLESHOOTING.md           failures by error text
 versions.env                 tool versions CI installs
 .claude/skills/config-change/  Claude Code skill for making a config change:
                              SKILL.md, scripts/verify-change.sh, evals/
+.claude/skills/commit/       Claude Code skill for committing: changelog entry,
+                             conventional message, staging, validation, push
+.claude/commands/commit.md   /commit, which invokes that skill
+CONTRIBUTING.md              the commit and changelog convention
+CHANGELOG.md                 user-facing changes, newest first
+CLAUDE.md                    what a Claude session needs to know here
 ```
 
 ## Requirements
