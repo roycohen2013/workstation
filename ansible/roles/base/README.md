@@ -57,6 +57,15 @@ nothing, which is the only correct behaviour here. |
 | Set history sizes in bashrc | ansible.builtin.lineinfile | False | No backrefs here, deliberately: appending is a correct fallback for these
 two. They are plain assignments that nothing unsets, so a later line wins if
 a future Ubuntu stops shipping the defaults. |
+| Set shell aliases in bashrc | ansible.builtin.blockinfile | False | One managed block rather than a line per alias: blockinfile owns the region
+between its markers, so an alias dropped from base_bash_aliases is gone from
+the file on the next converge. Appending at EOF puts these below Ubuntu's
+`case $- in *i*) ;; *) return;; esac` guard, so they are defined for
+interactive shells only -- which is all an alias is ever useful in. |
+| Install the fastfetch login banner | ansible.builtin.template | True | /etc/profile.d, following the pattern roles/dotfiles already uses for its own
+login hook: installed when enabled, removed when not, so switching the flag
+off actually takes the banner away instead of leaving a stale file behind. |
+| Remove the fastfetch login banner when disabled | ansible.builtin.file | True |  |
 | Grant passwordless sudo | ansible.builtin.copy | False |  |
 | Install authorized SSH keys | ansible.posix.authorized_key | True |  |
 | Remove the superseded sysctl file | ansible.builtin.file | False | --- Kernel tuning ------------------------------------------------------------

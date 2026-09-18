@@ -30,7 +30,11 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - krdc, KDE's remote desktop client.
 - BalenaEtcher, pinned to a GitHub release and always launched with `--no-sandbox`
   so it can write removable drives.
-- fastfetch.
+- fastfetch, which also prints a system-info banner when you log in and is
+  available as the `sysinfo` alias in any interactive shell. The banner comes
+  from `/etc/profile.d`, so it fires on a TTY, over ssh and in `bash -l`, but
+  not in every terminal tab; turn it off with `base_fastfetch_on_login`. Other
+  aliases can be added as data in `base_bash_aliases`.
 - The desktop wallpaper is stamped with the machine's hostname and IP address, in
   the top right in bold, and rendered at the screen's own resolution so GNOME's
   zoom-to-fill does not crop the text off the edge of the display.

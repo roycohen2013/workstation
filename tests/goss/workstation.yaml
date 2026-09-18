@@ -66,6 +66,20 @@ file:
     contains:
       - "MODULES=most"
 
+  # --- Interactive shell ------------------------------------------------------
+  # The banner has to be in the IMAGE, not applied later: a flashed machine is
+  # logged into long before anything runs `make apply`.
+  /etc/profile.d/zz-workstation-fastfetch.sh:
+    exists: true
+    contains:
+      - "fastfetch"
+  /etc/skel/.bashrc:
+    exists: true
+    contains:
+      # skel is what users created after imaging inherit, so the alias block
+      # landing here is what makes it reach them at all.
+      - "alias sysinfo="
+
   # --- Desktop configuration -------------------------------------------------
   /etc/dconf/db/local.d/00-workstation:
     exists: true

@@ -56,6 +56,24 @@ personal dotfiles -- roles/dotfiles deliberately pulls those at first login
 rather than baking them in. If chezmoi is later given .bashrc to manage, it
 owns the file and these settings are whatever that repository says.
 
+### `base_bash_aliases`
+
+_(list or block — see the file)_
+
+Aliases, written into both .bashrc files as one managed block so that an entry
+removed from this list also disappears from the file. A lineinfile per alias
+could only ever add one; nothing would retract it.
+
+### `base_fastfetch_on_login`
+
+`true`
+
+Print system info at login. This installs /etc/profile.d rather than appending
+to .bashrc, so it fires for login shells -- a TTY, ssh, `bash -l` -- and not
+for every terminal tab. Worth knowing on the desktop: GNOME Terminal opens
+non-login shells by default, so the banner shows up over ssh rather than in
+each new tab. The sysinfo alias above covers that case.
+
 ### `desktop_info_enabled`
 
 `true`
