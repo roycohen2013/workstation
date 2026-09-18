@@ -1,0 +1,11 @@
+# Managed by Ansible (roles/base)
+# Prints system info at login. Sourced by login shells only.
+
+# Both guards are load-bearing. PS1 keeps the banner out of a non-interactive
+# login: scp and rsync parse that stream, and anything printed into it corrupts
+# the transfer. command -v keeps a login working if fastfetch is ever dropped
+# from apps_apt_base -- a missing binary would otherwise print an error on every
+# single login, which is a far more annoying failure than a missing banner.
+if [ -n "${PS1:-}" ] && command -v fastfetch >/dev/null 2>&1; then
+    fastfetch
+fi

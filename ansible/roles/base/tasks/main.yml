@@ -102,6 +102,40 @@
   loop_control:
     label: "{{ item.0 }} {{ item.1.key }}"
 
+# One managed block rather than a line per alias: blockinfile owns the region
+# between its markers, so an alias dropped from base_bash_aliases is gone from
+# the file on the next converge. Appending at EOF puts these below Ubuntu's
+# `case $- in *i*) ;; *) return;; esac` guard, so they are defined for
+# interactive shells only -- which is all an alias is ever useful in.
+- name: Set shell aliases in bashrc
+  ansible.builtin.blockinfile:
+    path: "{{ item }}"
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: workstation aliases"
+    state: "{{ 'present' if base_bash_aliases | length > 0 else 'absent' }}"
+    block: |
+      {% for alias in base_bash_aliases %}
+      alias {{ alias.name }}='{{ alias.command }}'
+      {% endfor %}
+  loop:
+    - /etc/skel/.bashrc
+    - "/home/{{ workstation_user }}/.bashrc"
+
+# /etc/profile.d, following the pattern roles/dotfiles already uses for its own
+# login hook: installed when enabled, removed when not, so switching the flag
+# off actually takes the banner away instead of leaving a stale file behind.
+- name: Install the fastfetch login banner
+  ansible.builtin.template:
+    src: fastfetch-login.sh.j2
+    dest: /etc/profile.d/zz-workstation-fastfetch.sh
+    mode: "0644"
+  when: base_fastfetch_on_login | bool
+
+- name: Remove the fastfetch login banner when disabled
+  ansible.builtin.file:
+    path: /etc/profile.d/zz-workstation-fastfetch.sh
+    state: absent
+  when: not (base_fastfetch_on_login | bool)
+
 - name: Grant passwordless sudo
   ansible.builtin.copy:
     content: "{{ workstation_user }} ALL=(ALL) NOPASSWD:ALL\n"

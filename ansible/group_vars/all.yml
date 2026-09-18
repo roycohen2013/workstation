@@ -30,6 +30,19 @@ workstation_keyboard_layout: us
 # owns the file and these settings are whatever that repository says.
 base_bash_force_color_prompt: true
 
+# Aliases, written into both .bashrc files as one managed block so that an entry
+# removed from this list also disappears from the file. A lineinfile per alias
+# could only ever add one; nothing would retract it.
+base_bash_aliases:
+  - { name: sysinfo, command: fastfetch }
+
+# Print system info at login. This installs /etc/profile.d rather than appending
+# to .bashrc, so it fires for login shells -- a TTY, ssh, `bash -l` -- and not
+# for every terminal tab. Worth knowing on the desktop: GNOME Terminal opens
+# non-login shells by default, so the banner shows up over ssh rather than in
+# each new tab. The sysinfo alias above covers that case.
+base_fastfetch_on_login: true
+
 # --- Hostname and IP on the desktop -------------------------------------------
 # Which machine am I on, answered without opening a terminal. The text is
 # stamped onto the wallpaper rather than drawn by a desktop widget, which is
