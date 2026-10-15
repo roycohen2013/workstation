@@ -125,12 +125,16 @@ jobs:
           # tee would otherwise swallow a non-zero exit from ansible-playbook
           # and let a failed second run report success.
           set -o pipefail
+          # --diff so a task changed here says what it changed: a file's
+          # diff, or for apt the packages it upgraded and removed. Without it
+          # the log reads only "changed", and each non-idempotent task has to
+          # be diagnosed by guessing at what it did.
           ansible-playbook ansible/site.yml \
             -i localhost, -c local \
             -e workstation_phase=live \
             -e workstation_image_version=ci-${{ github.sha }} \
             -e dev_mise_install_runtimes=false \
-            --become | tee second-run.log
+            --become --diff | tee second-run.log
 
       - name: Report idempotence
         if: always() && steps.scope.outputs.needed == 'true'
