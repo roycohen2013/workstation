@@ -50,6 +50,15 @@ first thing to try configuring a server that was not there, and died with
 | Check whether an SSH server is installed | ansible.builtin.stat | True | Distinguishes "switched off on a machine that has one" -- where the hardening
 drop-in and an explicit stop are both still wanted -- from "switched off on a
 machine that never had one", where there is nothing to configure or stop. |
+| Ensure sshd's privilege separation directory exists | ansible.builtin.file | True | `sshd -t`, the validate step below, refuses to run without /run/sshd:
+"Missing privilege separation directory: /run/sshd". Nothing creates that
+directory at boot -- openssh-server ships no tmpfiles.d entry; it exists only
+while ssh.service runs, via RuntimeDirectory=sshd, and goes again when it
+stops. So wherever the server is installed but not running, the first
+converge that writes the drop-in failed: a fresh CI runner, and a freshly
+flashed machine, whose image ships the server disabled and gets this drop-in
+only at `make apply`. /run is tmpfs, so nothing here outlives a reboot, and a
+running service simply adopts the directory. |
 | Configure SSH server | ansible.builtin.copy | True |  |
 | Set SSH server run state | ansible.builtin.systemd | True |  |
 | Configure unattended upgrades | ansible.builtin.copy | True | --- Automatic updates -------------------------------------------------------- |
