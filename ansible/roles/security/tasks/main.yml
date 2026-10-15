@@ -11,13 +11,13 @@
 - name: Set UFW default incoming policy
   community.general.ufw:
     direction: incoming
-    policy: "{{ security_ufw_default_incoming }}"
+    default: "{{ security_ufw_default_incoming }}"
   when: workstation_firewall_enabled | bool
 
 - name: Set UFW default outgoing policy
   community.general.ufw:
     direction: outgoing
-    policy: "{{ security_ufw_default_outgoing }}"
+    default: "{{ security_ufw_default_outgoing }}"
   when: workstation_firewall_enabled | bool
 
 - name: Open configured ports
