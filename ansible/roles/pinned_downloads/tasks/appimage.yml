@@ -1,0 +1,17 @@
+---
+# Kept in place rather than downloaded and deleted: an AppImage is the
+# installed program, and get_url with a checksum re-verifies an existing file
+# and reports ok, so a converge does not re-fetch it. A version bump changes
+# the checksum, which is what makes get_url fetch the new release.
+- name: Create the directory for {{ pinned_downloads_item.name }}
+  ansible.builtin.file:
+    path: "{{ pinned_downloads_item.dest | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Install {{ pinned_downloads_item.name }}
+  ansible.builtin.get_url:
+    url: "{{ pinned_downloads_url }}"
+    dest: "{{ pinned_downloads_item.dest }}"
+    checksum: "{{ pinned_downloads_item.checksum }}"
+    mode: "0755"

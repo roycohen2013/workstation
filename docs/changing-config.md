@@ -107,3 +107,9 @@ Worth knowing if you go this route, because all three lint clean and fail later:
 Adding a third-party APT repo is data too — name, key URL, repo line, packages.
 Keys are dearmoured into `/etc/apt/keyrings` and referenced with `signed-by`, so
 no vendor key is trusted to sign anything outside its own repo.
+
+Software with no repository at all — a release `.deb`, a tarball holding one
+binary, an AppImage — is an entry in `pinned_downloads`: a version, a URL with
+`{version}` in it, and a checksum. `make verify-repos` checks every entry's URL
+still resolves, and `python3 scripts/verify-repos.py --checksums` checks the
+pinned checksum against what the URL serves; run that before building a bump.

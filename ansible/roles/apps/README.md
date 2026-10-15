@@ -132,21 +132,11 @@ already accessible.
 This lives here, not in workstation_user_groups, because roles/base creates
 the user long before these packages exist: the kvm group is created by the
 qemu recommends pulled in just above, so joining it any earlier fails. |
-| Check the installed BalenaEtcher version | ansible.builtin.command | True | --- BalenaEtcher ---------------------------------------------------------
-No apt repository exists in current vendor docs -- only a versioned .deb
-from GitHub releases, installed the way the vendor itself documents:
-`apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
-is exactly that -- apt, not raw dpkg, so dependencies resolve against the
-configured archive automatically.
-Gated on what is already installed. The .deb is ~150MB and is deleted after
-installing, so without this it was re-downloaded on every converge and this
-task, the install and the cleanup all reported changed forever -- which is
-what the CI idempotence pass reports. Deleting it is still right: keeping
-150MB of installer in the image to gain idempotence would be a bad trade,
-so the version check provides it instead. |
-| Download BalenaEtcher | ansible.builtin.get_url | True |  |
-| Install BalenaEtcher | ansible.builtin.apt | True |  |
-| Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
+| Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | --- BalenaEtcher ---------------------------------------------------------
+Downloaded and installed by roles/pinned_downloads, which runs before this
+role; what follows only makes it launch.
+
+BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 that have nothing to do with security here -- a setuid helper with the
 wrong permissions, a restrictive kernel, running inside a VM -- and when it
 does, the app refuses to launch at all rather than degrading. --no-sandbox
@@ -164,17 +154,10 @@ skip the wrapper instead of failing loudly. |
 | Fail loudly if the real binary could not be resolved | ansible.builtin.assert | True |  |
 | Move the real binary aside | ansible.builtin.command | True |  |
 | Install the --no-sandbox wrapper in its place | ansible.builtin.copy | True |  |
-| Remove the downloaded BalenaEtcher package | ansible.builtin.file | True |  |
 | Install snaps | community.general.snap | True | --- Snaps -------------------------------------------------------------------- |
-| Install the AppImage runtime dependency | ansible.builtin.apt | True | --- Flatpaks -----------------------------------------------------------------
---- Nimbalyst ----------------------------------------------------------------
-Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
-below, the file is kept in place rather than downloaded and deleted: get_url
-with a checksum re-verifies an existing file and reports ok, so a converge
-does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
-why the CI idempotence pass reports changes on every run. |
-| Create the Nimbalyst directory | ansible.builtin.file | True |  |
-| Install Nimbalyst | ansible.builtin.get_url | True |  |
+| Install the AppImage runtime dependency | ansible.builtin.apt | True | --- Nimbalyst ----------------------------------------------------------------
+The AppImage itself is installed by roles/pinned_downloads, which runs before
+this role; what follows integrates it with the desktop. |
 | Extract and install the Nimbalyst icon | ansible.builtin.shell | True | The AppImage carries its own icon, so it is taken from there rather than
 committed as a binary blob. Extracting a single path costs 36KB, not the
 ~1GB a full --appimage-extract would; guarded on the INSTALLED icon rather
@@ -185,7 +168,7 @@ not this repo being cautious: it is what the vendor's own desktop entry ships,
 and Ubuntu sets kernel.apparmor_restrict_unprivileged_userns=1, which stops an
 unpackaged Electron app from creating its sandbox at all. |
 | Link Nimbalyst onto PATH | ansible.builtin.copy | True |  |
-| Install flatpaks | community.general.flatpak | True |  |
+| Install flatpaks | community.general.flatpak | True | --- Flatpaks ----------------------------------------------------------------- |
 
 
 

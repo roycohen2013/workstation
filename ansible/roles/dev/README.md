@@ -47,18 +47,6 @@ and disappears with that home if the user is recreated. --global puts the
 venv in /opt/pipx and links the app into /usr/local/bin instead -- confirmed
 against pipx 1.8.0's own --help, the version resolute ships, rather than
 assumed from current docs. |
-| Check the installed terraform-docs version | ansible.builtin.command | False | terraform-docs is neither in the Ubuntu archive nor on PyPI, so it is
-fetched as a pinned release tarball. checksum: makes a tampered or truncated
-download fail the task outright rather than unpacking something unverified.
-Same gate as BalenaEtcher, for the same reason: the archive is downloaded and
-then deleted, so without a version check this task and the two after it
-reported changed on every converge. `terraform-docs --version` prints
-"terraform-docs version v0.24.0 <sha> linux/amd64", so the pinned version is
-matched as a substring rather than parsed. |
-| Download terraform-docs | ansible.builtin.get_url | True |  |
-| Install terraform-docs | ansible.builtin.unarchive | True | The tarball holds the bare binary at its root, so extra=... would scatter
-LICENSE and README into /usr/local/bin alongside it. |
-| Remove the downloaded terraform-docs archive | ansible.builtin.file | True |  |
 | Add user to the docker group | ansible.builtin.user | True | --- Docker ------------------------------------------------------------------- |
 | Enable docker | ansible.builtin.systemd | True |  |
 | Install mise | ansible.builtin.get_url | True | --- Language runtimes --------------------------------------------------------

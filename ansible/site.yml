@@ -43,6 +43,9 @@
     # desktop before apps: it installs flatpak and registers flathub, which
     # the apps role then installs into.
     - { role: desktop, tags: [desktop], when: workstation_desktop_enabled | bool }
+    # pinned_downloads before apps: apps wraps BalenaEtcher's binary and gives
+    # Nimbalyst its launcher, so both must already be installed.
+    - { role: pinned_downloads, tags: [pinned_downloads] }
     - { role: apps, tags: [apps] }
     # dev after apps: it adds the user to the docker group, which apps creates.
     - { role: dev, tags: [dev] }

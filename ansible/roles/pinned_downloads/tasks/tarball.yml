@@ -1,0 +1,40 @@
+---
+# One binary out of a release archive, into /usr/local/bin. Gated on what the
+# installed binary reports, for the same reason as deb.yml: the archive is
+# deleted afterwards, so without the gate every converge re-fetched it.
+# Matched as a substring, because tools print their version inside a sentence
+# ("terraform-docs version v0.24.0 <sha> linux/amd64") rather than alone.
+- name: Check the installed version of {{ pinned_downloads_item.name }}
+  ansible.builtin.command:
+    cmd: "/usr/local/bin/{{ pinned_downloads_item.binary | default(pinned_downloads_item.name) }} --version"
+  register: pinned_downloads_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install {{ pinned_downloads_item.name }}
+  when: pinned_downloads_item.version not in pinned_downloads_installed.stdout | default('')
+  block:
+    - name: Download {{ pinned_downloads_item.name }}
+      ansible.builtin.get_url:
+        url: "{{ pinned_downloads_url }}"
+        dest: "{{ pinned_downloads_tmp }}"
+        checksum: "{{ pinned_downloads_item.checksum }}"
+        mode: "0644"
+
+    # include, so only the binary lands: these archives carry LICENSE and
+    # README at their root, which would otherwise scatter into /usr/local/bin.
+    - name: Extract the binary for {{ pinned_downloads_item.name }}
+      ansible.builtin.unarchive:
+        src: "{{ pinned_downloads_tmp }}"
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - "{{ pinned_downloads_item.binary | default(pinned_downloads_item.name) }}"
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Remove the downloaded archive for {{ pinned_downloads_item.name }}
+      ansible.builtin.file:
+        path: "{{ pinned_downloads_tmp }}"
+        state: absent

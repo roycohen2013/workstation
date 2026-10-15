@@ -198,32 +198,8 @@ archive build means checking what exists in it first.
 
 `true`
 
-BalenaEtcher: no apt repository exists in current vendor documentation --
-checked 2026-08 against github.com/balena-io/etcher's README, which only
-describes downloading a versioned .deb and running
-`apt install ./balena-etcher_*_amd64.deb`. Installed that way, pinned, rather
-than via apps_apt_repos, and bumped deliberately when a new version is
-wanted -- the same trust model group_vars already uses for dev_mise_runtimes.
-
-### `balena_etcher_version`
-
-`"2.1.6"`
-
-### `balena_etcher_release_base`
-
-`https://github.com/balena-io/etcher/releases/download`
-
-### `balena_etcher_deb_url`
-
-_(list or block — see the file)_
-
-### `balena_etcher_deb_sha256`
-
-`2bdebb46c9f750a9abf11c188ff69a405b4a4fed114333d634c3b3fe59a64057`
-
-From the release's combined SHA256SUMS.Linux.x64.txt. A mismatch fails the
-download task outright, so an interrupted or tampered fetch stops the build
-instead of installing something unverified.
+BalenaEtcher and Nimbalyst have no apt repository; both are pinned
+downloads, declared in pinned_downloads below with their versions.
 
 ### `workstation_1password_enabled`
 
@@ -232,42 +208,6 @@ instead of installing something unverified.
 ### `workstation_nimbalyst_enabled`
 
 `true`
-
-Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
-Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt
-repository, no snap, no flatpak -- confirmed against their README, which
-links the AppImage as the only Linux download. Pinned and checksummed, the
-same trust model as balena_etcher, for the same reason: a release URL alone
-verifies nothing.
-~470MB, the largest single thing in this image -- more than the four
-LibreOffice applications combined. Recorded here so that weight is
-attributable later rather than looking unaccounted for.
-v0.75.5 is the current STABLE release. The newer v0.76.0 is marked
-prerelease; the app also has its own alpha channel, switchable in
-Settings -> Advanced. Bump deliberately.
-Note their telemetry is on by default: anonymous usage analytics to PostHog,
-correlated by a random per-install ID. That ID is generated per user on first
-run, not at install, so nothing machine-specific is baked into the image and
-roles/seal needs no change. Opting out is a GUI setting
-(Settings -> Advanced -> Analytics), so it cannot be disabled declaratively.
-
-### `nimbalyst_version`
-
-`"0.75.5"`
-
-### `nimbalyst_appimage_url`
-
-_(list or block — see the file)_
-
-### `nimbalyst_appimage_sha512`
-
-`0b86fc9b173d633530d6b6e8782d99c8a447a82db8b5dae6fd2f3ee5c74576aa3c6bdcac230755fab54558b82fe212b42ff25ea1cc5201cc9708e5771432d995`
-
-From the release's own latest-linux.yml, which electron-builder publishes as
-base64; converted to the hex Ansible expects and length-checked at 128.
-A 128-character hash cannot be wrapped -- a folded scalar would inject a
-space into it -- so the length rule is waived for this one line.
-yamllint disable-line rule:line-length
 
 ### `apps_1password_debsig_key_id`
 
@@ -357,6 +297,32 @@ source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
 then only bootstraps the first install and is removed once theirs exists --
 see roles/apps. Without it the two fight, and every converge reports a change.
 
+### `pinned_downloads`
+
+_(list or block — see the file)_
+
+**Pinned downloads**
+Software with no apt repository, snap or flatpak, fetched from a release URL
+instead. Each entry is pinned by version and checksum: a release URL alone
+verifies nothing, and a checksum mismatch fails the download outright rather
+than installing something unverified. Bump deliberately, the same way
+dev_mise_runtimes is bumped, and check the new pin with
+`python3 scripts/verify-repos.py --checksums` before building.
+roles/pinned_downloads installs every entry; `make verify-repos` checks every
+entry still exists. Adding one here is all either of them needs. Whatever an
+entry needs after it installs -- a wrapper, a desktop entry -- stays in the
+role that owns that app (roles/apps for both desktop apps).
+- `name`: the entry's name, and the deb package or tarball member to install
+  unless `package` or `binary` says otherwise.
+- `enabled`: optional feature switch, as in apps_apt_repos.
+- `kind`: `deb` installs with apt, so its dependencies resolve, then deletes
+  the .deb; the installed version decides whether to fetch it again.
+  `tarball` extracts one binary into /usr/local/bin and deletes the archive;
+  `<binary> --version` decides. `appimage` is kept at `dest`; the checksum of
+  what is already there decides, so a converge never re-fetches it.
+- `version`: substituted for every {version} in `url`, so a bump is one line.
+- `checksum`: `<algorithm>:<hex>`, as ansible.builtin.get_url takes it.
+
 ### `apps_snap`
 
 `[]`
@@ -399,30 +365,6 @@ settles, and it was instead spending most of its runtime fetching toolchains
 and then failing on `mise install core:python` with a filesystem permission
 error specific to the runner image -- a red build that told you nothing.
 Left true everywhere else, so a real converge still installs them.
-
-### `dev_terraform_docs_version`
-
-`"0.24.0"`
-
-terraform-docs generates the tables in docs/terraform.md. Not packaged for
-Ubuntu and not on PyPI, so it is a pinned release binary with a checksum --
-the same trust model balena_etcher uses, for the same reason: nothing else
-verifies what a release URL hands back.
-The pin is load-bearing beyond supply chain. `make lint-docs` regenerates
-the committed docs and fails if anything moved, so a version that formats
-its tables even slightly differently turns into a red build on a machine
-that happened to install a newer one. Bump it deliberately, then run
-`make docs-config` and commit the regenerated output in the same change.
-
-### `dev_terraform_docs_url`
-
-_(list or block — see the file)_
-
-### `dev_terraform_docs_sha256`
-
-`9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3`
-
-From the release's own terraform-docs-v<version>.sha256sum.
 
 ## Dotfiles
  Managed with chezmoi. The image ships the chezmoi binary only -- the repo

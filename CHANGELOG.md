@@ -74,6 +74,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Fixed
 
+- `make verify-repos` now checks Nimbalyst's pinned AppImage, which it had
+  never covered, and `--checksums` verifies its sha512 rather than assuming
+  every pin is sha256.
 - `make apply` no longer times out on Ubuntu 26.04, whose `sudo-rs` does not present
   the password prompt Ansible's become plugin expects.
 - `make apply` no longer fails on a machine with no SSH server installed, or with

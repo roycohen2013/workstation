@@ -5,7 +5,7 @@ collections:
   # first real build, and 12.0.0 removed the community.general.yaml callback
   # plugin ansible.cfg depended on, breaking Ansible before a single task ran.
   # Raise the ceiling deliberately, after testing against it, the same way
-  # balena_etcher_version and dev_mise_runtimes are bumped on purpose rather
+  # pinned_downloads and dev_mise_runtimes are bumped on purpose rather
   # than left to float. Only this collection is capped: it is the one with a
   # confirmed incident behind it, not a guess applied for symmetry -- there is
   # no known break in ansible.posix, so it is floored but not capped.

@@ -88,6 +88,12 @@ definition: converging an already-converged machine changes nothing, which is
 what the CI job verifies by doing it twice.
 _Avoid_: apply (as a concept — `make apply` is the command that converges)
 
+**Pinned download**:
+Software installed from a release URL rather than a repository, declared as an
+entry in `pinned_downloads` with an exact version and checksum. Changes only
+when someone bumps it.
+_Avoid_: direct download, manual install, vendored binary
+
 **Declared**:
 What `ansible/group_vars/all.yml` says should be on a machine.
 _Avoid_: intended, wanted, specified
