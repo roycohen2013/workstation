@@ -4,6 +4,12 @@ name: lint
 # Runs on every push. Deliberately does NOT build an image: a full build takes
 # 30-60 minutes and pushes several GB to object storage, which is not a
 # reasonable thing to do on every commit. See build.yml.
+#
+# Every check is a make target, the same one `make lint` runs locally; a job
+# here only installs tools and calls it. When the two were written separately
+# they drifted -- local lint syntax-checked one phase and CI two, CI validated
+# Packer fully and local lint only its syntax -- so a clean `make lint` did not
+# predict a green CI run.
 # Trunk pushes and PRs only. This used to be branches: ["**"] alongside
 # pull_request, which ran the whole suite twice for every PR from a branch in
 # this repository -- invisible while everything was pushed straight to trunk,
@@ -31,18 +37,10 @@ jobs:
         run: pip install --quiet ansible ansible-lint yamllint
 
       - name: yamllint
-        run: yamllint -c .yamllint ansible/ tests/ iso/ packer/http/
+        run: make lint-yaml
 
-      - name: ansible-lint
-        run: ansible-lint ansible/
-
-      - name: Playbook syntax check (both phases)
-        run: |
-          for phase in image live; do
-            echo "--- phase=$phase"
-            ANSIBLE_CONFIG=ansible.cfg ansible-playbook ansible/site.yml \
-              -i localhost, -c local -e "workstation_phase=$phase" --syntax-check
-          done
+      - name: ansible-lint and syntax check (both phases)
+        run: make lint-ansible
 
   packer:
     runs-on: ubuntu-latest
@@ -56,13 +54,8 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      - name: Format check
-        run: packer fmt -check -diff packer/
-
-      - name: Validate
-        run: |
-          packer init packer/
-          packer validate packer/
+      - name: Format check and validate
+        run: make lint-packer
 
   terraform:
     runs-on: ubuntu-latest
@@ -76,18 +69,10 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
 
-      - name: Format check
-        run: terraform fmt -check -recursive terraform/
-
-      # Validated per-directory: the two configs use different providers and
-      # have no shared state or module relationship.
-      - name: Validate
-        run: |
-          for dir in terraform/*/; do
-            echo "--- $dir"
-            terraform -chdir="$dir" init -backend=false -input=false
-            terraform -chdir="$dir" validate
-          done
+      # Validated per directory inside the target: the two configs use
+      # different providers and share no state or modules.
+      - name: Format check and validate
+        run: make lint-terraform
 
   docs:
     runs-on: ubuntu-latest

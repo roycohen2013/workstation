@@ -181,9 +181,12 @@ CLAUDE.md                    what a Claude session needs to know here
 ## CI
 
 - **`lint.yml`** runs on every push: yamllint, ansible-lint, playbook syntax
-  check in both phases, `packer validate`, `terraform validate`, shellcheck.
+  check in both phases, `packer validate`, `terraform validate`, shellcheck,
+  and the generated-docs check. Each job calls the same `make lint-*` target
+  you run locally, so a clean `make lint` predicts a green run.
 - **`apply.yml`** runs the live half of the playbook for real, on a runner,
-  whenever `ansible/` changes and weekly. It then runs it a *second* time and
+  through `make apply`, whenever `ansible/`, `tests/goss/`, the `Makefile` or
+  `versions.env` changes, and weekly. It then runs it a *second* time and
   reports how much changed — a playbook that never settles is broken in a way
   a single run cannot show. This is the only CI job that executes the config
   rather than analysing it.
