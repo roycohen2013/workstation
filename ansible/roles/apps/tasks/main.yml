@@ -71,13 +71,32 @@
 #   claude-desktop:   armoured, vendor path
 #   1password:        dearmoured, vendor path
 #   hashicorp:        dearmoured, vendor path -- see the note in group_vars
-- name: Install repository signing keys (dearmoured)
+#
+# Dearmoured into the cache on every converge, then copied into place, so the
+# installed keyring follows the fetched key. This used to dearmour straight to
+# the keyring with `creates:`, which skipped it whenever the keyring existed:
+# when HashiCorp rotated its signing key, get_url refreshed the cached .asc but
+# the keyring stayed on the old key, and every apt update on machines
+# converged before the rotation failed with NO_PUBKEY. Dearmouring is
+# deterministic, so the copy reports a change only when the key really did.
+- name: Dearmour repository signing keys into the cache
   ansible.builtin.command:
     cmd: >-
       gpg --batch --yes --dearmor
-      -o {{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}
+      -o /var/cache/workstation/keys/{{ item.name }}.gpg
       /var/cache/workstation/keys/{{ item.name }}.asc
-    creates: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
+  changed_when: false
+  loop: "{{ apps_repos_enabled }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.key_armoured | default(false) | bool)
+
+- name: Install repository signing keys (dearmoured)
+  ansible.builtin.copy:
+    src: "/var/cache/workstation/keys/{{ item.name }}.gpg"
+    dest: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
+    remote_src: true
+    mode: "0644"
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"

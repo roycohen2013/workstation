@@ -58,7 +58,7 @@ host blinking -- one DNS EAI_AGAIN out of eight -- failed the whole run.
 Deliberately NOT falling back to the cached key when a host stays
 unreachable: that would silently keep using a key the vendor may have
 rotated or revoked, which is the one failure here worth being loud about. |
-| Install repository signing keys (dearmoured) | ansible.builtin.command | True | Key handling is two independent choices, because vendors differ on both:
+| Dearmour repository signing keys into the cache | ansible.builtin.command | True | Key handling is two independent choices, because vendors differ on both:
 key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
 key_armoured whether to copy the .asc verbatim or dearmour it first
 
@@ -69,7 +69,16 @@ vendor's documented layout keeps apt working whichever entry wins.
 docker:           defaults (dearmoured, our path)
 claude-desktop:   armoured, vendor path
 1password:        dearmoured, vendor path
-hashicorp:        dearmoured, vendor path -- see the note in group_vars |
+hashicorp:        dearmoured, vendor path -- see the note in group_vars
+
+Dearmoured into the cache on every converge, then copied into place, so the
+installed keyring follows the fetched key. This used to dearmour straight to
+the keyring with `creates:`, which skipped it whenever the keyring existed:
+when HashiCorp rotated its signing key, get_url refreshed the cached .asc but
+the keyring stayed on the old key, and every apt update on machines
+converged before the rotation failed with NO_PUBKEY. Dearmouring is
+deterministic, so the copy reports a change only when the key really did. |
+| Install repository signing keys (dearmoured) | ansible.builtin.copy | True |  |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
 | Check which vendors already manage their own apt source | ansible.builtin.stat | False | Some vendors' postinst replaces the source this role declares with its own
