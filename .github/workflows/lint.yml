@@ -148,5 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Through make, so CI and a local `make lint` check the same files --
+      # including skipping the vendored skills listed in skills-lock.json.
       - name: shellcheck
-        run: shellcheck $(find scripts tests .claude -name '*.sh' 2>/dev/null | sort)
+        run: make lint-shell
