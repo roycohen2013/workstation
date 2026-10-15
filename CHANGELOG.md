@@ -54,6 +54,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Changed
 
+- BalenaEtcher is updated to 2.1.7.
 - Image compression level is now the `compression_level` build variable, defaulting
   to 12 instead of a hard-coded 19. Level 19 took roughly nine times longer for a
   2.9-percentage-point smaller image; override it with
