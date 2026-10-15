@@ -103,7 +103,7 @@
     label: "{{ item.0 }} {{ item.1.key }}"
 
 # One managed block rather than a line per alias: blockinfile owns the region
-# between its markers, so an alias dropped from base_bash_aliases is gone from
+# between its markers, so an alias dropped from base_shell_aliases is gone from
 # the file on the next converge. Appending at EOF puts these below Ubuntu's
 # `case $- in *i*) ;; *) return;; esac` guard, so they are defined for
 # interactive shells only -- which is all an alias is ever useful in.
@@ -111,14 +111,43 @@
   ansible.builtin.blockinfile:
     path: "{{ item }}"
     marker: "# {mark} ANSIBLE MANAGED BLOCK: workstation aliases"
-    state: "{{ 'present' if base_bash_aliases | length > 0 else 'absent' }}"
+    state: "{{ 'present' if base_shell_aliases | length > 0 else 'absent' }}"
     block: |
-      {% for alias in base_bash_aliases %}
+      {% for alias in base_shell_aliases %}
       alias {{ alias.name }}='{{ alias.command }}'
       {% endfor %}
   loop:
     - /etc/skel/.bashrc
     - "/home/{{ workstation_user }}/.bashrc"
+
+# zsh reads none of the bash files, and not /etc/profile.d either outside a
+# login shell -- which a GNOME Terminal tab is not. /etc/zsh/zshrc is Debian's
+# system zshrc, sourced by every interactive zsh, so the same block there
+# reaches the configured user, root and any user created later, without
+# creating a ~/.zshrc: that file belongs to the user's dotfiles, and a block
+# planted in it would fight chezmoi, which replaces the file wholesale. The
+# system file runs before ~/.zshrc, so personal aliases still win.
+#
+# Like /etc/skel/.bashrc above, this is a dpkg conffile: if zsh-common ever
+# ships a changed one, dpkg stops to ask instead of replacing it, and
+# unattended-upgrades holds that package back until someone answers. Rare for
+# this file, and the price of reaching every zsh without touching anyone's
+# home directory.
+- name: Check for the system zshrc
+  ansible.builtin.stat:
+    path: /etc/zsh/zshrc
+  register: base_system_zshrc
+
+- name: Set shell aliases in the system zshrc
+  ansible.builtin.blockinfile:
+    path: /etc/zsh/zshrc
+    marker: "# {mark} ANSIBLE MANAGED BLOCK: workstation aliases"
+    state: "{{ 'present' if base_shell_aliases | length > 0 else 'absent' }}"
+    block: |
+      {% for alias in base_shell_aliases %}
+      alias {{ alias.name }}='{{ alias.command }}'
+      {% endfor %}
+  when: base_system_zshrc.stat.exists
 
 # /etc/profile.d, following the pattern roles/dotfiles already uses for its own
 # login hook: installed when enabled, removed when not, so switching the flag

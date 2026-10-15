@@ -162,7 +162,15 @@ skip the wrapper instead of failing loudly. |
 | Read its Exec line | ansible.builtin.shell | True |  |
 | Resolve the real binary the launcher points at | ansible.builtin.shell | True |  |
 | Fail loudly if the real binary could not be resolved | ansible.builtin.assert | True |  |
-| Move the real binary aside | ansible.builtin.command | True |  |
+| Move the real binary aside | ansible.builtin.shell | True | Keyed on what is at <binary> now, not on whether <binary>.real exists.
+dpkg does not track .real, so a version bump writes the NEW binary over our
+wrapper and leaves the OLD one sitting at .real; a `creates:` guard on .real
+would then skip the move, the wrapper would be rewritten over the new binary,
+and the old release's binary would run against the new release's resources.
+So: if <binary> is anything other than our wrapper -- a fresh install or an
+upgrade alike -- it is the real binary and goes to .real, replacing whatever
+was there. The marker is the wrapper's "Managed by Ansible" line, which
+wrappers written before this check already carry. |
 | Install the --no-sandbox wrapper in its place | ansible.builtin.copy | True |  |
 | Remove the downloaded BalenaEtcher package | ansible.builtin.file | True |  |
 | Install snaps | community.general.snap | True | --- Snaps -------------------------------------------------------------------- |

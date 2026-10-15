@@ -79,6 +79,12 @@ file:
       # skel is what users created after imaging inherit, so the alias block
       # landing here is what makes it reach them at all.
       - "alias sysinfo="
+  /etc/zsh/zshrc:
+    exists: true
+    contents:
+      # The configured user's login shell is zsh, which never reads .bashrc:
+      # without the block here the aliases above are invisible to them.
+      - "alias sysinfo="
 
   # --- Desktop configuration -------------------------------------------------
   /etc/dconf/db/local.d/00-workstation:

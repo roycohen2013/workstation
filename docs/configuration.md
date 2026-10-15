@@ -56,13 +56,16 @@ personal dotfiles -- roles/dotfiles deliberately pulls those at first login
 rather than baking them in. If chezmoi is later given .bashrc to manage, it
 owns the file and these settings are whatever that repository says.
 
-### `base_bash_aliases`
+### `base_shell_aliases`
 
 _(list or block — see the file)_
 
-Aliases, written into both .bashrc files as one managed block so that an entry
-removed from this list also disappears from the file. A lineinfile per alias
-could only ever add one; nothing would retract it.
+Aliases for every interactive shell, bash and zsh alike, written as one
+managed block so that an entry removed from this list also disappears from
+the file. A lineinfile per alias could only ever add one; nothing would
+retract it. bash gets the block in both .bashrc files above; zsh gets it in
+/etc/zsh/zshrc, which every interactive zsh reads before ~/.zshrc -- so a
+personal ~/.zshrc (chezmoi's to own) can still override any of these.
 
 ### `base_fastfetch_on_login`
 
