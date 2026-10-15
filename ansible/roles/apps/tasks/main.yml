@@ -102,24 +102,30 @@
   loop_control:
     label: "{{ item.name }}"
 
-# 1Password's postinst writes its own deb822 source at
-# /etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
-# debsig keyring too -- and then does:
+# Some vendors' postinst replaces the source this role declares with its own
+# deb822 file, /etc/apt/sources.list.d/<name>.sources, and then disables ours:
+# 1Password comments out our .list, Chrome deletes it. Either way, re-adding
+# ours on the next converge only restarts the fight, and CI's idempotence pass
+# reported "Add repositories" changed on every run because of it.
 #
-#     sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
-#
-# which comments out the file apt_repository manages here. Our next converge
-# uncomments it, their next package operation comments it again, and the CI
-# idempotence pass reported "Add repositories" changed forever because of it.
-#
-# Our entry is only needed to bootstrap: once their .sources exists, it is
-# authoritative and ours is redundant. So stop declaring it, and remove the
-# commented-out leftover so exactly one declaration of the origin remains --
-# after the package installs, below, not here.
-- name: Check whether 1Password now manages its own apt source
+# Our entry is only needed to bootstrap: once the vendor's .sources exists it
+# is authoritative and ours is redundant. So entries marked vendor_sources in
+# group_vars stop being declared here once that file exists, and our leftover
+# .list is removed after the packages install, below -- leaving exactly one
+# declaration of each origin.
+- name: Check which vendors already manage their own apt source
   ansible.builtin.stat:
-    path: /etc/apt/sources.list.d/1password.sources
-  register: apps_1password_own_source
+    path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
+  loop: "{{ apps_repos_enabled | selectattr('vendor_sources', 'defined') | selectattr('vendor_sources') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: apps_vendor_sources
+
+- name: Note which vendors own their apt source
+  ansible.builtin.set_fact:
+    apps_vendor_owned: >-
+      {{ apps_vendor_sources.results | selectattr('stat.exists')
+         | map(attribute='item.name') | list }}
 
 - name: Add repositories
   ansible.builtin.apt_repository:
@@ -133,7 +139,7 @@
   loop: "{{ apps_repos_enabled }}"
   loop_control:
     label: "{{ item.name }}"
-  when: not (item.name == '1password' and apps_1password_own_source.stat.exists)
+  when: item.name not in apps_vendor_owned
 
 # 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 # addition to apt verifying the repository -- so it has to be in place before
@@ -177,21 +183,6 @@
     creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
   when: workstation_1password_enabled | bool
 
-# Chrome re-adds its own apt source and keyring -- from postinst and from a
-# daily cron job -- writing the same sources.list.d filename this role manages.
-# If its version wins and names a keyring we never created, every later apt
-# update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
-# that, so it has to exist BEFORE the package installs.
-- name: Stop Google Chrome managing its own apt source
-  ansible.builtin.copy:
-    content: |
-      # Managed by Ansible (roles/apps) -- this repo owns the apt entry.
-      repo_add_once="false"
-      repo_reenable_on_distupgrade="false"
-    dest: /etc/default/google-chrome
-    mode: "0644"
-  when: workstation_chrome_enabled | bool
-
 - name: Install packages from third-party repositories
   ansible.builtin.apt:
     name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"
@@ -199,23 +190,28 @@
   when: apps_repos_enabled | length > 0
 
 # Checked again now, not reused from the check above. On a first converge --
-# every image build, and every CI runner -- that check ran before 1Password
-# was installed, so it was false: our .list was written to bootstrap, then the
-# postinst wrote .sources and commented ours out. Reusing that stale answer
-# skipped the cleanup, shipped the dead .list in every image, and left it for
-# the second converge to delete, which made CI's idempotence pass report a
-# change on every run. If a future postinst ever stops writing .sources, this
-# stays false and our .list is kept: apt still has a working source.
-- name: Check again whether 1Password now manages its own apt source
+# every image build, and every CI runner -- that check ran before the vendor's
+# package was installed, so it was false: our .list was written to bootstrap,
+# then the postinst wrote .sources. Reusing that stale answer skipped the
+# cleanup, shipped the dead .list in every image, and left it for the second
+# converge to delete, which made CI's idempotence pass report a change on
+# every run. If a future postinst ever stops writing .sources, this stays
+# false and our .list is kept: apt still has a working source.
+- name: Check again which vendors now manage their own apt source
   ansible.builtin.stat:
-    path: /etc/apt/sources.list.d/1password.sources
-  register: apps_1password_own_source_installed
+    path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
+  loop: "{{ apps_repos_enabled | selectattr('vendor_sources', 'defined') | selectattr('vendor_sources') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: apps_vendor_sources_installed
 
-- name: Remove our redundant 1Password apt source
+- name: Remove our bootstrap apt source where the vendor's has replaced it
   ansible.builtin.file:
-    path: /etc/apt/sources.list.d/1password.list
+    path: "/etc/apt/sources.list.d/{{ item.item.name }}.list"
     state: absent
-  when: apps_1password_own_source_installed.stat.exists
+  loop: "{{ apps_vendor_sources_installed.results | selectattr('stat.exists') | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
 
 # Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 # It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open

@@ -327,6 +327,11 @@ apps_apt_absent:
 # --- APT: third-party repositories -------------------------------------------
 # Each entry adds a signed keyring and a sources.list.d entry. Keys are
 # dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
+#
+# vendor_sources: true marks a vendor whose package installs its own deb822
+# source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
+# then only bootstraps the first install and is removed once theirs exists --
+# see roles/apps. Without it the two fight, and every converge reports a change.
 apps_apt_repos:
   - name: docker
     enabled: "{{ workstation_docker_enabled }}"
@@ -372,6 +377,9 @@ apps_apt_repos:
       deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg]
       https://dl.google.com/linux/chrome/deb/
       stable main
+    # Chrome's postinst writes google-chrome.sources and deletes our .list,
+    # whatever /etc/default/google-chrome says.
+    vendor_sources: true
     packages:
       - google-chrome-stable
 
@@ -385,6 +393,8 @@ apps_apt_repos:
       deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg]
       https://downloads.1password.com/linux/debian/amd64
       stable main
+    # 1Password's postinst writes 1password.sources and comments out our .list.
+    vendor_sources: true
     packages:
       - 1password
 
