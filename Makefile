@@ -307,7 +307,12 @@ lint-shell:
 	@# `|| true`: find exits non-zero when .claude is missing, and under
 	@# .SHELLFLAGS pipefail that would abort here -- reintroducing exactly the
 	@# "lint-shell on trees without a .claude directory" bug already fixed once.
-	sh_files=$$(find scripts tests .claude -name '*.sh' 2>/dev/null | sort) || true
+	@# Skills installed with `npx skills add` are listed in skills-lock.json and
+	@# skipped: they are vendored, the way ansible/.collections is for
+	@# ansible-lint, and `npx skills update` would overwrite any fix made here.
+	vendored=$$(python3 -c 'import json; print("|".join(json.load(open("skills-lock.json"))["skills"]))' 2>/dev/null) || true
+	sh_files=$$(find scripts tests .claude -name '*.sh' 2>/dev/null | sort \
+	  | grep -vE "^\.claude/skills/($${vendored:-^})/") || true
 	if [ -z "$$sh_files" ]; then echo "lint-shell: no shell scripts found"; exit 0; fi
 	shellcheck $$sh_files
 

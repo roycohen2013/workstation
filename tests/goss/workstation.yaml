@@ -9,38 +9,25 @@
 #      machine identity, anything that makes a shared artifact unsafe or
 #      makes every machine built from it identical.
 
+# Everything group_vars declares -- apt packages, flatpaks, snaps, and what
+# must be absent -- is asserted by declared.goss.tmpl, generated from the set
+# roles/manifest recorded in /etc/workstation-declared.json. It is not listed
+# here: a second copy of that list is one nobody keeps in step.
+gossfile:
+  declared.goss.tmpl: {}
+
 package:
-  # A representative slice of the declared package set; the full list lives in
-  # group_vars and is not duplicated here.
-  git:               { installed: true }
-  curl:              { installed: true }
-  zsh:               { installed: true }
-  ripgrep:           { installed: true }
-  build-essential:   { installed: true }
-  ubuntu-desktop-minimal: { installed: true }
+  # Only what no group_vars list declares, so the declared set cannot vouch
+  # for it.
+  #
+  # Arrives with ubuntu-desktop-minimal rather than by name; it is what puts a
+  # login screen on a flashed machine.
   gdm3:              { installed: true }
-  docker-ce:         { installed: true }
-  # Bare-metal portability: without linux-firmware a flashed laptop has no
-  # Wi-Fi, and it is easy to lose by building "minimal" in a VM.
-  linux-firmware:    { installed: true }
-  tlp:               { installed: true }
-  claude-desktop:    { installed: true }
-  google-chrome-stable: { installed: true }
-  code:              { installed: true }
-  balena-etcher:     { installed: true }
-  libreoffice-writer:  { installed: true }
-  libreoffice-calc:    { installed: true }
-  libreoffice-impress: { installed: true }
-  libreoffice-draw:    { installed: true }
-  krdc:              { installed: true }
-  1password:         { installed: true }
   # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
   qemu-system-x86:   { installed: true }
   ovmf:              { installed: true }
-  wireshark:         { installed: true }
-  tshark:            { installed: true }
-  fwupd:             { installed: true }
-  # Needed by firstboot to resize the root partition on the target disk.
+  # From the installer, not group_vars. Needed by firstboot to resize the root
+  # partition on the target disk, and by the bootloader on bare metal.
   cloud-guest-utils: { installed: true }
   gdisk:             { installed: true }
   grub-efi-amd64:    { installed: true }
@@ -185,7 +172,7 @@ command:
   # exist under the configured ID rather than assuming the ID is right.
   1password-debsig-policy-installed:
     exec: |
-      id=$(cat /etc/workstation-debsig-id)
+      id=$(cat /etc/workstation-debsig/1password)
       test -s "/etc/debsig/policies/${id}/1password.pol" \
         && test -s "/usr/share/debsig/keyrings/${id}/debsig.gpg" \
         && echo installed

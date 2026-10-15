@@ -1,0 +1,36 @@
+---
+# Installed with apt rather than raw dpkg, so dependencies resolve against the
+# configured archive -- the `apt install ./<file>.deb` vendors document.
+#
+# Gated on the installed version. The .deb is deleted after installing, because
+# keeping a 150MB installer in the image to gain idempotence is a bad trade --
+# but without the gate it was re-downloaded on every converge, and the
+# download, install and cleanup all reported changed forever, which is what
+# CI's idempotence pass reports.
+- name: Check the installed version of {{ pinned_downloads_item.name }}
+  ansible.builtin.command:
+    cmd: >-
+      dpkg-query -W -f='${Version}'
+      {{ pinned_downloads_item.package | default(pinned_downloads_item.name) }}
+  register: pinned_downloads_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install {{ pinned_downloads_item.name }}
+  when: pinned_downloads_installed.stdout | default('') != pinned_downloads_item.version
+  block:
+    - name: Download {{ pinned_downloads_item.name }}
+      ansible.builtin.get_url:
+        url: "{{ pinned_downloads_url }}"
+        dest: "{{ pinned_downloads_tmp }}"
+        checksum: "{{ pinned_downloads_item.checksum }}"
+        mode: "0644"
+
+    - name: Install the package for {{ pinned_downloads_item.name }}
+      ansible.builtin.apt:
+        deb: "{{ pinned_downloads_tmp }}"
+
+    - name: Remove the downloaded package for {{ pinned_downloads_item.name }}
+      ansible.builtin.file:
+        path: "{{ pinned_downloads_tmp }}"
+        state: absent

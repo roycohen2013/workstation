@@ -1,256 +1,9 @@
 ---
-# Third-party APT repositories, snaps and flatpaks. Everything is driven by the
-# data in group_vars/all.yml -- adding software should never mean editing this
-# file.
-
-# --- Third-party APT repositories ---------------------------------------------
-- name: Ensure keyring directories exist
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - /etc/apt/keyrings
-    - /usr/share/keyrings
-
-# `enabled` is usually a template referencing a feature switch, which renders
-# to a string. selectattr() would truth-test that string, and a non-empty
-# "False" is truthy -- silently enabling a repository that is switched off.
-# An explicit `| bool` is the only reliable test here.
-- name: Select enabled repositories
-  ansible.builtin.set_fact:
-    apps_repos_enabled: "{{ apps_repos_enabled + [item] }}"
-  loop: "{{ apps_apt_repos }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.enabled | default(true) | bool
-
-# Keys are dearmoured into /etc/apt/keyrings and referenced per-repo with
-# signed-by, rather than added to the deprecated global trusted keyring where
-# any one vendor key would be trusted to sign any package.
-# Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
-# file against what it fetches and reports ok when they match -- but only if
-# the file is still there. Deleting it made this task, and the dearmour and
-# apt_repository tasks below it, report changed on every single converge; the
-# CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
-# also survives a reboot. This is public key material, a few KB per vendor.
-- name: Ensure the key cache exists
-  ansible.builtin.file:
-    path: /var/cache/workstation/keys
-    state: directory
-    mode: "0755"
-
-# Retried rather than left to fail: get_url contacts every one of these URLs
-# on every converge to compare against the cached copy, so a single vendor
-# host blinking -- one DNS EAI_AGAIN out of eight -- failed the whole run.
-# Deliberately NOT falling back to the cached key when a host stays
-# unreachable: that would silently keep using a key the vendor may have
-# rotated or revoked, which is the one failure here worth being loud about.
-- name: Fetch repository signing keys
-  ansible.builtin.get_url:
-    url: "{{ item.key_url }}"
-    dest: "/var/cache/workstation/keys/{{ item.name }}.asc"
-    mode: "0644"
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: apps_key_fetch
-  until: apps_key_fetch is succeeded
-  retries: 3
-  delay: 5
-
-# Key handling is two independent choices, because vendors differ on both:
-#   key_path     where the keyring lands (default: /etc/apt/keyrings/<name>.gpg)
-#   key_armoured whether to copy the .asc verbatim or dearmour it first
-#
-# It matters because several vendors' packages register their own
-# sources.list.d entry naming a keyring path of their choosing -- if that file
-# does not exist, every later apt update fails with NO_PUBKEY. Matching the
-# vendor's documented layout keeps apt working whichever entry wins.
-#   docker:           defaults (dearmoured, our path)
-#   claude-desktop:   armoured, vendor path
-#   1password:        dearmoured, vendor path
-#   hashicorp:        dearmoured, vendor path -- see the note in group_vars
-#
-# Dearmoured into the cache on every converge, then copied into place, so the
-# installed keyring follows the fetched key. This used to dearmour straight to
-# the keyring with `creates:`, which skipped it whenever the keyring existed:
-# when HashiCorp rotated its signing key, get_url refreshed the cached .asc but
-# the keyring stayed on the old key, and every apt update on machines
-# converged before the rotation failed with NO_PUBKEY. Dearmouring is
-# deterministic, so the copy reports a change only when the key really did.
-- name: Dearmour repository signing keys into the cache
-  ansible.builtin.command:
-    cmd: >-
-      gpg --batch --yes --dearmor
-      -o /var/cache/workstation/keys/{{ item.name }}.gpg
-      /var/cache/workstation/keys/{{ item.name }}.asc
-  changed_when: false
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: not (item.key_armoured | default(false) | bool)
-
-- name: Install repository signing keys (dearmoured)
-  ansible.builtin.copy:
-    src: "/var/cache/workstation/keys/{{ item.name }}.gpg"
-    dest: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
-    remote_src: true
-    mode: "0644"
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: not (item.key_armoured | default(false) | bool)
-
-- name: Install repository signing keys (armoured, verbatim)
-  ansible.builtin.copy:
-    src: "/var/cache/workstation/keys/{{ item.name }}.asc"
-    dest: "{{ item.key_path }}"
-    remote_src: true
-    mode: "0644"
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.key_armoured | default(false) | bool
-
-- name: Set keyring permissions
-  ansible.builtin.file:
-    path: "{{ item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg') }}"
-    mode: "0644"
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-
-# Some vendors' postinst replaces the source this role declares with its own
-# deb822 file, /etc/apt/sources.list.d/<name>.sources, and then disables ours:
-# 1Password comments out our .list, Chrome deletes it. Either way, re-adding
-# ours on the next converge only restarts the fight, and CI's idempotence pass
-# reported "Add repositories" changed on every run because of it.
-#
-# Our entry is only needed to bootstrap: once the vendor's .sources exists it
-# is authoritative and ours is redundant. So entries marked vendor_sources in
-# group_vars stop being declared here once that file exists, and our leftover
-# .list is removed after the packages install, below -- leaving exactly one
-# declaration of each origin.
-- name: Check which vendors already manage their own apt source
-  ansible.builtin.stat:
-    path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
-  loop: "{{ apps_repos_enabled | selectattr('vendor_sources', 'defined') | selectattr('vendor_sources') | list }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: apps_vendor_sources
-
-- name: Note which vendors own their apt source
-  ansible.builtin.set_fact:
-    apps_vendor_owned: >-
-      {{ apps_vendor_sources.results | selectattr('stat.exists')
-         | map(attribute='item.name') | list }}
-
-# Before adding: apt_repository matches lines exactly, so a changed `repo`
-# would otherwise be appended next to the line it replaces.
-- name: Remove repository lines an entry no longer declares
-  ansible.builtin.apt_repository:
-    repo: "{{ item.1 }}"
-    filename: "{{ item.0.name }}"
-    state: absent
-    update_cache: false
-  loop: "{{ apps_repos_enabled | subelements('repo_replaces', skip_missing=True) }}"
-  loop_control:
-    label: "{{ item.0.name }}"
-
-- name: Add repositories
-  ansible.builtin.apt_repository:
-    repo: "{{ item.repo }}"
-    filename: "{{ item.name }}"
-    state: present
-    # Refresh inline rather than in a separate changed-gated task: the very
-    # next task installs from these repositories, and a handler would not run
-    # until the end of the play -- far too late.
-    update_cache: true
-  loop: "{{ apps_repos_enabled }}"
-  loop_control:
-    label: "{{ item.name }}"
-  when: item.name not in apps_vendor_owned
-
-# 1Password's debsig-verify policy. This verifies the .deb's own signature, in
-# addition to apt verifying the repository -- so it has to be in place before
-# the package installs, not after.
-#
-# If apps_1password_debsig_key_id is wrong, these files land in a directory
-# dpkg never consults and the policy is silently inert. apt install still
-# succeeds, which is why goss asserts the paths rather than trusting them.
-- name: Create 1Password debsig directories
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - "/etc/debsig/policies/{{ apps_1password_debsig_key_id }}"
-    - "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}"
-  when: workstation_1password_enabled | bool
-
-# Recorded so the image test asserts against the id actually used, rather than
-# duplicating the constant into the test suite where the two could drift.
-- name: Record the debsig key id used
-  ansible.builtin.copy:
-    content: "{{ apps_1password_debsig_key_id }}\n"
-    dest: /etc/workstation-debsig-id
-    mode: "0644"
-  when: workstation_1password_enabled | bool
-
-- name: Install 1Password debsig policy
-  ansible.builtin.get_url:
-    url: https://downloads.1password.com/linux/debian/debsig/1password.pol
-    dest: "/etc/debsig/policies/{{ apps_1password_debsig_key_id }}/1password.pol"
-    mode: "0644"
-  when: workstation_1password_enabled | bool
-
-- name: Install 1Password debsig keyring
-  ansible.builtin.command:
-    cmd: >-
-      gpg --batch --yes --dearmor
-      -o /usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg
-      /var/cache/workstation/keys/1password.asc
-    creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
-  when: workstation_1password_enabled | bool
-
-# latest, not present: base upgrades everything before these repositories
-# are added, so a package already installed from elsewhere -- a .deb fetched
-# by hand, or the GitHub runner's preinstalled docker-ce and Chrome -- would
-# count as present at its old version and only catch up on the next converge.
-# CI's idempotence pass reported exactly that as base's upgrade changing every
-# run. Where the package is new or already current this is the same as present.
-# package-latest guards against unpinned drift; base's dist-upgrade already
-# takes every package to latest on every converge, so this adds none.
-- name: Install packages from third-party repositories
-  ansible.builtin.apt:
-    name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"
-    state: latest  # noqa: package-latest
-  when: apps_repos_enabled | length > 0
-
-# Checked again now, not reused from the check above. On a first converge --
-# every image build, and every CI runner -- that check ran before the vendor's
-# package was installed, so it was false: our .list was written to bootstrap,
-# then the postinst wrote .sources. Reusing that stale answer skipped the
-# cleanup, shipped the dead .list in every image, and left it for the second
-# converge to delete, which made CI's idempotence pass report a change on
-# every run. If a future postinst ever stops writing .sources, this stays
-# false and our .list is kept: apt still has a working source.
-- name: Check again which vendors now manage their own apt source
-  ansible.builtin.stat:
-    path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
-  loop: "{{ apps_repos_enabled | selectattr('vendor_sources', 'defined') | selectattr('vendor_sources') | list }}"
-  loop_control:
-    label: "{{ item.name }}"
-  register: apps_vendor_sources_installed
-
-- name: Remove our bootstrap apt source where the vendor's has replaced it
-  ansible.builtin.file:
-    path: "/etc/apt/sources.list.d/{{ item.item.name }}.list"
-    state: absent
-  loop: "{{ apps_vendor_sources_installed.results | selectattr('stat.exists') | list }}"
-  loop_control:
-    label: "{{ item.item.name }}"
+# Snaps, flatpaks, and what individual apps need once they are installed.
+# Their repositories and packages come from roles/apt_repos and
+# roles/pinned_downloads, which both run before this role. Everything is driven
+# by the data in group_vars/all.yml -- adding software should never mean
+# editing this file.
 
 # Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 # It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
@@ -268,44 +21,9 @@
   when: workstation_claude_desktop_enabled | bool
 
 # --- BalenaEtcher ---------------------------------------------------------
-# No apt repository exists in current vendor docs -- only a versioned .deb
-# from GitHub releases, installed the way the vendor itself documents:
-# `apt install ./balena-etcher_*_amd64.deb`. ansible.builtin.apt's deb: param
-# is exactly that -- apt, not raw dpkg, so dependencies resolve against the
-# configured archive automatically.
-# Gated on what is already installed. The .deb is ~150MB and is deleted after
-# installing, so without this it was re-downloaded on every converge and this
-# task, the install and the cleanup all reported changed forever -- which is
-# what the CI idempotence pass reports. Deleting it is still right: keeping
-# 150MB of installer in the image to gain idempotence would be a bad trade,
-# so the version check provides it instead.
-- name: Check the installed BalenaEtcher version
-  ansible.builtin.command:
-    cmd: dpkg-query -W -f='${Version}' balena-etcher
-  register: apps_etcher_installed
-  changed_when: false
-  failed_when: false
-  when: workstation_balena_etcher_enabled | bool
-
-- name: Download BalenaEtcher
-  ansible.builtin.get_url:
-    url: "{{ balena_etcher_deb_url }}"
-    dest: "/tmp/balena-etcher_{{ balena_etcher_version }}_amd64.deb"
-    checksum: "sha256:{{ balena_etcher_deb_sha256 }}"
-    mode: "0644"
-  when:
-    - workstation_balena_etcher_enabled | bool
-    - apps_etcher_installed.stdout | default('') != balena_etcher_version
-    - workstation_desktop_enabled | bool
-
-- name: Install BalenaEtcher
-  ansible.builtin.apt:
-    deb: "/tmp/balena-etcher_{{ balena_etcher_version }}_amd64.deb"
-  when:
-    - workstation_balena_etcher_enabled | bool
-    - workstation_desktop_enabled | bool
-    - apps_etcher_installed.stdout | default('') != balena_etcher_version
-
+# Downloaded and installed by roles/pinned_downloads, which runs before this
+# role; what follows only makes it launch.
+#
 # BalenaEtcher's Chromium sandbox routinely fails to initialise for reasons
 # that have nothing to do with security here -- a setuid helper with the
 # wrong permissions, a restrictive kernel, running inside a VM -- and when it
@@ -416,15 +134,6 @@
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
 
-- name: Remove the downloaded BalenaEtcher package
-  ansible.builtin.file:
-    path: "/tmp/balena-etcher_{{ balena_etcher_version }}_amd64.deb"
-    state: absent
-  when:
-    - apps_etcher_installed.stdout | default('') != balena_etcher_version
-    - workstation_balena_etcher_enabled | bool
-    - workstation_desktop_enabled | bool
-
 # --- Snaps --------------------------------------------------------------------
 - name: Install snaps
   community.general.snap:
@@ -436,32 +145,13 @@
     label: "{{ item.name }}"
   when: apps_snap | length > 0
 
-# --- Flatpaks -----------------------------------------------------------------
 # --- Nimbalyst ----------------------------------------------------------------
-# Distributed as an AppImage and nothing else on Linux. Unlike BalenaEtcher
-# below, the file is kept in place rather than downloaded and deleted: get_url
-# with a checksum re-verifies an existing file and reports ok, so a converge
-# does not re-fetch 470MB. The download/delete pairs elsewhere in this role are
-# why the CI idempotence pass reports changes on every run.
+# The AppImage itself is installed by roles/pinned_downloads, which runs before
+# this role; what follows integrates it with the desktop.
 - name: Install the AppImage runtime dependency
   ansible.builtin.apt:
     name: libfuse2t64
     state: present
-  when: workstation_nimbalyst_enabled | bool
-
-- name: Create the Nimbalyst directory
-  ansible.builtin.file:
-    path: /opt/nimbalyst
-    state: directory
-    mode: "0755"
-  when: workstation_nimbalyst_enabled | bool
-
-- name: Install Nimbalyst
-  ansible.builtin.get_url:
-    url: "{{ nimbalyst_appimage_url }}"
-    dest: /opt/nimbalyst/Nimbalyst.AppImage
-    checksum: "sha512:{{ nimbalyst_appimage_sha512 }}"
-    mode: "0755"
   when: workstation_nimbalyst_enabled | bool
 
 # The AppImage carries its own icon, so it is taken from there rather than
@@ -516,6 +206,7 @@
     mode: "0755"
   when: workstation_nimbalyst_enabled | bool
 
+# --- Flatpaks -----------------------------------------------------------------
 - name: Install flatpaks
   community.general.flatpak:
     name: "{{ item }}"

@@ -276,8 +276,9 @@ Gotchas that pass lint and fail at build time:
   `"False"` is truthy, which would silently enable a repo the user switched off.
 
 - **The keyring filename is derived from `name:`.** An entry named `tailscale` must
-  reference `signed-by=/etc/apt/keyrings/tailscale.gpg`. A mismatch produces a
-  signature error that reads like a network fault.
+  reference `signed-by=/etc/apt/keyrings/tailscale.gpg` (or its `key_path`).
+  `roles/apt_repos` refuses a mismatch, or an unknown field, the moment the
+  playbook starts -- but nothing catches it at lint time, so get it right here.
 
 - **Keep lines under 120 characters** (yamllint). Repo lines almost always exceed it —
   use a folded scalar, as the existing entries do:

@@ -9,6 +9,7 @@ set -euo pipefail
 GOSS_VERSION="${GOSS_VERSION:-v0.4.9}"
 GOSS_FILE="${GOSS_FILE:-/tmp/goss/workstation.yaml}"
 GOSS_BIN=/tmp/goss/goss
+GOSS_VARS="${GOSS_VARS:-/etc/workstation-declared.json}"
 
 echo "==> Fetching goss ${GOSS_VERSION}"
 curl -fsSL -o "$GOSS_BIN" \
@@ -26,7 +27,10 @@ echo "==> Validating image against ${GOSS_FILE} (user=${WS_USER})"
 # would exit here and skip the cleanup below, leaving the test binary behind
 # in the image on exactly the runs where something went wrong.
 status=0
-"$GOSS_BIN" --gossfile "$GOSS_FILE" validate --format documentation --max-concurrent 4 || status=$?
+# --vars feeds declared.goss.tmpl the set roles/manifest recorded, so the
+# image is tested against everything group_vars declares rather than a copy.
+"$GOSS_BIN" --gossfile "$GOSS_FILE" --vars "$GOSS_VARS" \
+  validate --format documentation --max-concurrent 4 || status=$?
 
 echo "==> Removing test tooling from the image"
 rm -rf /tmp/goss

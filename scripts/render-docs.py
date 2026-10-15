@@ -140,7 +140,9 @@ def render(manifest, declared_doc):
     flats = manifest.get("packages", {}).get("flatpak", [])
     satisfied = set(manifest.get("satisfied_names", []))
 
-    declared = set(declared_doc.get("declared", []))
+    # "apt" since the declared set grew flatpaks and snaps; "declared" is what
+    # builds before that wrote, and those can still be re-rendered.
+    declared = set(declared_doc.get("apt", declared_doc.get("declared", [])))
     absent = set(declared_doc.get("absent", []))
     missing = sorted(declared - satisfied)
     not_removed = sorted(absent & satisfied)

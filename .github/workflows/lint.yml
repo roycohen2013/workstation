@@ -110,14 +110,20 @@ jobs:
 
       - name: Install doc tooling
         run: |
-          pip install --quiet docsible
-          ver=$(sed -n 's/^dev_terraform_docs_version: *"\(.*\)"/\1/p' ansible/group_vars/all.yml)
-          sha=$(sed -n 's/^dev_terraform_docs_sha256: *//p' ansible/group_vars/all.yml)
-          test -n "$ver" -a -n "$sha" || { echo "could not read the terraform-docs pin from group_vars"; exit 1; }
-          echo "terraform-docs v$ver"
-          curl -fsSL -o tfd.tar.gz \
-            "https://github.com/terraform-docs/terraform-docs/releases/download/v${ver}/terraform-docs-v${ver}-linux-amd64.tar.gz"
-          echo "${sha}  tfd.tar.gz" | sha256sum -c -
+          pip install --quiet docsible pyyaml
+          # The url, algorithm and digest of the terraform-docs entry in
+          # pinned_downloads, the same entry roles/pinned_downloads installs.
+          read -r url algo sha < <(python3 -c '
+          import yaml
+          entries = yaml.safe_load(open("ansible/group_vars/all.yml"))["pinned_downloads"]
+          e = next(e for e in entries if e["name"] == "terraform-docs")
+          algo, sha = e["checksum"].split(":", 1)
+          print(e["url"].replace("{version}", e["version"]), algo, sha)
+          ')
+          test -n "$url" -a -n "$sha" || { echo "could not read the terraform-docs pin from group_vars"; exit 1; }
+          echo "terraform-docs from $url"
+          curl -fsSL -o tfd.tar.gz "$url"
+          echo "${sha}  tfd.tar.gz" | "${algo}sum" -c -
           tar xzf tfd.tar.gz terraform-docs
           sudo install -m 0755 terraform-docs /usr/local/bin/terraform-docs
           rm -f tfd.tar.gz terraform-docs
@@ -142,5 +148,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Through make, so CI and a local `make lint` check the same files --
+      # including skipping the vendored skills listed in skills-lock.json.
       - name: shellcheck
-        run: shellcheck $(find scripts tests .claude -name '*.sh' 2>/dev/null | sort)
+        run: make lint-shell

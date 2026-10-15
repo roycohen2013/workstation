@@ -101,9 +101,18 @@ Worth knowing if you go this route, because all three lint clean and fail later:
 - **A vendor repo's packages go in that repo entry's own `packages:` list**, never
   in `apps_apt_base` — otherwise apt tries to install them before the repo exists.
 - **The keyring filename is derived from the entry's `name:`.** An entry named
-  `tailscale` must say `signed-by=/etc/apt/keyrings/tailscale.gpg`. A mismatch
-  produces a signature error that reads like a network fault.
+  `tailscale` must say `signed-by=/etc/apt/keyrings/tailscale.gpg`. Lint does not
+  catch a mismatch; `roles/apt_repos` refuses it as soon as the playbook starts,
+  rather than letting it surface as a signature error that reads like a network
+  fault. It refuses an unknown field the same way, so a misspelling such as
+  `key_armored` fails instead of being silently ignored.
 
 Adding a third-party APT repo is data too — name, key URL, repo line, packages.
 Keys are dearmoured into `/etc/apt/keyrings` and referenced with `signed-by`, so
 no vendor key is trusted to sign anything outside its own repo.
+
+Software with no repository at all — a release `.deb`, a tarball holding one
+binary, an AppImage — is an entry in `pinned_downloads`: a version, a URL with
+`{version}` in it, and a checksum. `make verify-repos` checks every entry's URL
+still resolves, and `python3 scripts/verify-repos.py --checksums` checks the
+pinned checksum against what the URL serves; run that before building a bump.

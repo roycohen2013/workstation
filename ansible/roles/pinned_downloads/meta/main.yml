@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: pinned_downloads
+  description: Installs software fetched from a release URL, pinned by version and checksum.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

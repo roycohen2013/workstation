@@ -1,0 +1,50 @@
+---
+# Software with no apt repository, fetched from a release URL instead. Driven
+# entirely by pinned_downloads in group_vars/all.yml -- what each field means
+# is documented there. Adding a download should never mean editing this role.
+
+# Checked up front, and for every entry including disabled ones, so a malformed
+# entry fails here with its name rather than halfway through a download -- or
+# not at all until someone switches it on.
+#
+# '{version}' in url is the check that matters most: a URL with the version
+# written out would keep fetching the old release after a bump, whose checksum
+# no longer matches, and the failure would read as a tampered download.
+- name: Check each pinned download is complete
+  ansible.builtin.assert:
+    that:
+      - item.kind | default('') in ['deb', 'tarball', 'appimage']
+      - item.version is defined
+      - "'{version}' in item.url | default('')"
+      - item.checksum | default('') is match('^(sha256|sha512):[0-9a-f]+$')
+      - item.kind | default('') != 'appimage' or item.dest is defined
+    fail_msg: >-
+      pinned_downloads entry '{{ item.name | default('?') }}' is incomplete:
+      it needs kind (deb, tarball or appimage), version, a url containing
+      {version}, checksum as sha256:<hex> or sha512:<hex>, and dest for an
+      appimage. See the field list above pinned_downloads in group_vars/all.yml.
+    quiet: true
+  loop: "{{ pinned_downloads }}"
+  loop_control:
+    label: "{{ item.name | default('?') }}"
+
+# `enabled` is usually a template referencing a feature switch, which renders
+# to a string, and a non-empty "False" is truthy -- the same trap roles/apt_repos
+# documents for apps_apt_repos. An explicit `| bool` is the only reliable test.
+- name: Select enabled pinned downloads
+  ansible.builtin.set_fact:
+    pinned_downloads_enabled: "{{ pinned_downloads_enabled + [item] }}"
+  loop: "{{ pinned_downloads }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.enabled | default(true) | bool
+
+- name: Install pinned downloads
+  ansible.builtin.include_tasks: "{{ pinned_downloads_item.kind }}.yml"
+  vars:
+    pinned_downloads_url: "{{ pinned_downloads_item.url | replace('{version}', pinned_downloads_item.version) }}"
+    pinned_downloads_tmp: "/tmp/{{ pinned_downloads_url | basename }}"
+  loop: "{{ pinned_downloads_enabled }}"
+  loop_control:
+    loop_var: pinned_downloads_item
+    label: "{{ pinned_downloads_item.name }} {{ pinned_downloads_item.version }}"

@@ -198,32 +198,8 @@ archive build means checking what exists in it first.
 
 `true`
 
-BalenaEtcher: no apt repository exists in current vendor documentation --
-checked 2026-08 against github.com/balena-io/etcher's README, which only
-describes downloading a versioned .deb and running
-`apt install ./balena-etcher_*_amd64.deb`. Installed that way, pinned, rather
-than via apps_apt_repos, and bumped deliberately when a new version is
-wanted -- the same trust model group_vars already uses for dev_mise_runtimes.
-
-### `balena_etcher_version`
-
-`"2.1.7"`
-
-### `balena_etcher_release_base`
-
-`https://github.com/balena-io/etcher/releases/download`
-
-### `balena_etcher_deb_url`
-
-_(list or block — see the file)_
-
-### `balena_etcher_deb_sha256`
-
-`9dbea6165ddee1ec1f1b7a38fe92f0d2c54c6217710438a7af6752c267d19395`
-
-From the release's combined SHA256SUMS.Linux.x64.txt. A mismatch fails the
-download task outright, so an interrupted or tampered fetch stops the build
-instead of installing something unverified.
+BalenaEtcher and Nimbalyst have no apt repository; both are pinned
+downloads, declared in pinned_downloads below with their versions.
 
 ### `workstation_1password_enabled`
 
@@ -232,57 +208,6 @@ instead of installing something unverified.
 ### `workstation_nimbalyst_enabled`
 
 `true`
-
-Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
-Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt
-repository, no snap, no flatpak -- confirmed against their README, which
-links the AppImage as the only Linux download. Pinned and checksummed, the
-same trust model as balena_etcher, for the same reason: a release URL alone
-verifies nothing.
-~470MB, the largest single thing in this image -- more than the four
-LibreOffice applications combined. Recorded here so that weight is
-attributable later rather than looking unaccounted for.
-v0.75.5 is the current STABLE release. The newer v0.76.0 is marked
-prerelease; the app also has its own alpha channel, switchable in
-Settings -> Advanced. Bump deliberately.
-Note their telemetry is on by default: anonymous usage analytics to PostHog,
-correlated by a random per-install ID. That ID is generated per user on first
-run, not at install, so nothing machine-specific is baked into the image and
-roles/seal needs no change. Opting out is a GUI setting
-(Settings -> Advanced -> Analytics), so it cannot be disabled declaratively.
-
-### `nimbalyst_version`
-
-`"0.75.5"`
-
-### `nimbalyst_appimage_url`
-
-_(list or block — see the file)_
-
-### `nimbalyst_appimage_sha512`
-
-`0b86fc9b173d633530d6b6e8782d99c8a447a82db8b5dae6fd2f3ee5c74576aa3c6bdcac230755fab54558b82fe212b42ff25ea1cc5201cc9708e5771432d995`
-
-From the release's own latest-linux.yml, which electron-builder publishes as
-base64; converted to the hex Ansible expects and length-checked at 128.
-A 128-character hash cannot be wrapped -- a folded scalar would inject a
-space into it -- so the length rule is waived for this one line.
-yamllint disable-line rule:line-length
-
-### `apps_1password_debsig_key_id`
-
-`AC2D62742012EA22`
-
-1Password additionally documents a debsig-verify policy, which checks the
-.deb's own signature on top of apt's repository signature. The policy lives
-in a directory named after 1Password's signing key ID.
-The directory name is derived from the long ID of 1Password's signing key,
-and has been confirmed to match the key they publish.
-Keep it checked rather than assumed: a wrong value fails silently, because
-the policy lands where dpkg never looks, stays inert, and apt install
-succeeds anyway. `make verify-repos` re-verifies it against the published
-key, so a rotation shows up as a failure instead of as an image that
-quietly stops validating the packages it installs.
 
 ### `workstation_firewall_enabled`
 
@@ -348,14 +273,57 @@ Packages to remove (Ubuntu ships a few things you may not want).
 _(list or block — see the file)_
 
 **APT: third-party repositories**
-Each entry adds a signed keyring and a sources.list.d entry. Keys are
-dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
-repo_replaces lists lines an entry used to declare, so changing `repo` does
-not leave the old line next to the new one on machines that already have it.
-vendor_sources: true marks a vendor whose package installs its own deb822
-source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
-then only bootstraps the first install and is removed once theirs exists --
-see roles/apps. Without it the two fight, and every converge reports a change.
+Each entry adds a signed keyring and a sources.list.d entry, then installs its
+packages from it. roles/apt_repos does the work and checks every entry before
+touching anything, so a missing or misspelt field fails the run up front.
+- `name`: the entry's name. Our source file is sources.list.d/<name>.list,
+  and the keyring defaults to /etc/apt/keyrings/<name>.gpg.
+- `enabled`: optional feature switch.
+- `key_url`: the vendor's signing key, fetched on every converge so a
+  rotated key is picked up.
+- `key_path`: where the keyring goes, when the vendor documents a path of
+  its own -- see the vendors below for why matching it matters.
+- `key_armoured`: install the key as the .asc the vendor publishes, rather
+  than dearmoured. Needs `key_path`.
+- `repo`: the deb line. Its signed-by must name the keyring path above;
+  anything else is refused, because it fails later as a signature error
+  that reads like a network fault.
+- `repo_replaces`: lines an entry used to declare, so changing `repo` does
+  not leave the old line next to the new one on machines that have it.
+- `vendor_sources`: the vendor's package installs its own deb822 source at
+  sources.list.d/<name>.sources and disables ours. Our entry then only
+  bootstraps the first install and is removed once theirs exists. Without
+  it the two fight, and every converge reports a change.
+- `debsig_key_id` and `debsig_policy_url`: a debsig-verify policy, which
+  checks the .deb's own signature on top of apt's repository signature.
+- `packages`: what to install from it. Never list these in apps_apt_base:
+  apt would try to install them before the repository exists.
+
+### `pinned_downloads`
+
+_(list or block — see the file)_
+
+**Pinned downloads**
+Software with no apt repository, snap or flatpak, fetched from a release URL
+instead. Each entry is pinned by version and checksum: a release URL alone
+verifies nothing, and a checksum mismatch fails the download outright rather
+than installing something unverified. Bump deliberately, the same way
+dev_mise_runtimes is bumped, and check the new pin with
+`python3 scripts/verify-repos.py --checksums` before building.
+roles/pinned_downloads installs every entry; `make verify-repos` checks every
+entry still exists. Adding one here is all either of them needs. Whatever an
+entry needs after it installs -- a wrapper, a desktop entry -- stays in the
+role that owns that app (roles/apps for both desktop apps).
+- `name`: the entry's name, and the deb package or tarball member to install
+  unless `package` or `binary` says otherwise.
+- `enabled`: optional feature switch, as in apps_apt_repos.
+- `kind`: `deb` installs with apt, so its dependencies resolve, then deletes
+  the .deb; the installed version decides whether to fetch it again.
+  `tarball` extracts one binary into /usr/local/bin and deletes the archive;
+  `<binary> --version` decides. `appimage` is kept at `dest`; the checksum of
+  what is already there decides, so a converge never re-fetches it.
+- `version`: substituted for every {version} in `url`, so a bump is one line.
+- `checksum`: `<algorithm>:<hex>`, as ansible.builtin.get_url takes it.
 
 ### `apps_snap`
 
@@ -399,30 +367,6 @@ settles, and it was instead spending most of its runtime fetching toolchains
 and then failing on `mise install core:python` with a filesystem permission
 error specific to the runner image -- a red build that told you nothing.
 Left true everywhere else, so a real converge still installs them.
-
-### `dev_terraform_docs_version`
-
-`"0.24.0"`
-
-terraform-docs generates the tables in docs/terraform.md. Not packaged for
-Ubuntu and not on PyPI, so it is a pinned release binary with a checksum --
-the same trust model balena_etcher uses, for the same reason: nothing else
-verifies what a release URL hands back.
-The pin is load-bearing beyond supply chain. `make lint-docs` regenerates
-the committed docs and fails if anything moved, so a version that formats
-its tables even slightly differently turns into a red build on a machine
-that happened to install a newer one. Bump it deliberately, then run
-`make docs-config` and commit the regenerated output in the same change.
-
-### `dev_terraform_docs_url`
-
-_(list or block — see the file)_
-
-### `dev_terraform_docs_sha256`
-
-`9005daf969de0b50134493a2c00078b49f5f5b39d021cda7c89bf4d4f3d776d3`
-
-From the release's own terraform-docs-v<version>.sha256sum.
 
 ## Dotfiles
  Managed with chezmoi. The image ships the chezmoi binary only -- the repo

@@ -1,7 +1,7 @@
 ---
 galaxy_info:
   role_name: apps
-  description: Third-party APT repositories, snaps and flatpaks, all declared as data.
+  description: Snaps, flatpaks, and the setup individual apps need once installed.
   author: workstation
   license: MIT
   min_ansible_version: "2.15"

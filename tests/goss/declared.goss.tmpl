@@ -1,0 +1,35 @@
+{{- /*
+  Assertions generated from /etc/workstation-declared.json, the declared set
+  roles/manifest assembled from group_vars and checked against the inventory.
+  run-goss.sh passes that file as --vars; without it this template fails to
+  render, which fails the run rather than silently asserting nothing.
+
+  Not a .yaml file on purpose: it is a Go template, and yamllint would reject
+  the template syntax.
+
+  Runs after roles/seal, so it also catches anything seal's autoremove took
+  that the manifest check, which runs before seal, could not see.
+
+  A declared name must be a real package here, not a virtual one: goss asks
+  dpkg about the name itself, where roles/manifest also accepts a name that
+  an installed package Provides.
+*/ -}}
+package:
+{{- range .Vars.apt }}
+  {{ . }}: { installed: true }
+{{- end }}
+{{- range .Vars.absent }}
+  {{ . }}: { installed: false }
+{{- end }}
+
+command:
+{{- range .Vars.flatpak }}
+  flatpak-{{ . }}:
+    exec: "flatpak info --system {{ . }}"
+    exit-status: 0
+{{- end }}
+{{- range .Vars.snap }}
+  snap-{{ . }}:
+    exec: "snap list {{ . }}"
+    exit-status: 0
+{{- end }}

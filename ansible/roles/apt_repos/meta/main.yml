@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: apt_repos
+  description: Third-party APT repositories, their signing keys, and the packages installed from them.
+  author: workstation
+  license: MIT
+  min_ansible_version: "2.15"
+  galaxy_tags: [workstation, image]
+dependencies: []

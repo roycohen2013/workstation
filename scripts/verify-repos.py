@@ -9,16 +9,15 @@ It also substitutes the Ubuntu codename into repo lines. Docker and HashiCorp
 template it; checking those by hand means knowing that 26.04 is "resolute",
 which is exactly the kind of detail worth not relying on someone remembering.
 
-Beyond repositories it checks the pinned direct downloads -- BalenaEtcher and
-terraform-docs -- which no repository check covers: both are pinned by version
-with a recorded sha256, and a withdrawn or re-cut release otherwise surfaces
-only mid-build.
+Beyond repositories it checks every entry in pinned_downloads, which no
+repository check covers: each is pinned by version and checksum, and a
+withdrawn or re-cut release otherwise surfaces only mid-build.
 
   scripts/verify-repos.py [--codename resolute] [--only NAME] [--checksums]
 
 --checksums additionally downloads each pinned artifact and hashes it. Off by
-default because BalenaEtcher alone is ~150MB; existence is the cheap check
-worth running often.
+default because Nimbalyst alone is ~470MB; existence is the cheap check worth
+running often.
 
 Exit codes match verify-change.sh, aggregated over everything checked:
   0  all verified
@@ -61,46 +60,34 @@ def parse_deb_line(line):
     return parts[0].rstrip("/"), parts[1], parts[2]
 
 
-def render(template, data):
-    """Fill {{ var }} references from group_vars, one level deep.
-
-    Deliberately not Jinja: these URLs reference plain scalars declared beside
-    them, and pulling in a template engine to substitute two variables would
-    mean this check fails for reasons unrelated to what it is checking.
-    """
-    out = str(template)
-    for _ in range(5):
-        new = re.sub(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}",
-                     lambda m: str(data.get(m.group(1), m.group(0))), out)
-        if new == out:
-            break
-        out = new
-    return " ".join(out.split())
+def pinned_url(entry):
+    """An entry's download URL, with its version substituted for {version}."""
+    return " ".join(str(entry.get("url", "")).replace(
+        "{version}", str(entry.get("version", ""))).split())
 
 
 def check_pinned_downloads(data, want_checksums):
     """Do the pinned release artifacts still exist, and still hash as declared?
 
-    Repositories are checked above, but the two things installed from a direct
-    URL -- BalenaEtcher and terraform-docs -- are not covered by that at all.
-    Both are pinned by version with a recorded sha256, and a vendor deleting or
-    re-cutting a release only surfaces mid-build otherwise.
+    Repositories are checked above, but nothing installed from a direct URL is
+    covered by that at all. Each is pinned by version with a recorded checksum,
+    and a vendor deleting or re-cutting a release only surfaces mid-build
+    otherwise. Every entry is checked, enabled or not: switching one on should
+    not be the moment its pin turns out to be dead.
     """
+    import hashlib
     import urllib.error
     import urllib.request
 
     targets = []
-    for label, url_key, sha_key in (
-        ("balena-etcher", "balena_etcher_deb_url", "balena_etcher_deb_sha256"),
-        ("terraform-docs", "dev_terraform_docs_url", "dev_terraform_docs_sha256"),
-    ):
-        if data.get(url_key):
-            targets.append((label, render(data[url_key], data), data.get(sha_key)))
+    for entry in data.get("pinned_downloads", []) or []:
+        algo, _, digest = str(entry.get("checksum", "")).partition(":")
+        targets.append((entry.get("name", "?"), pinned_url(entry), algo, digest))
 
     worst = 0
-    for label, url, sha in targets:
+    for label, url, algo, sha in targets:
         print(f"--- {label}")
-        if "{{" in url:
+        if "{" in url:
             print(f"  ! unresolved template: {url}")
             worst = 1
             print()
@@ -129,21 +116,27 @@ def check_pinned_downloads(data, want_checksums):
             worst = 1
 
         if want_checksums and code == 200:
-            import hashlib
             try:
+                h = hashlib.new(algo)
                 with urllib.request.urlopen(
                         urllib.request.Request(
                             url, headers={"User-Agent": "workstation-verify-repos"}),
                         timeout=600) as r:
-                    digest = hashlib.sha256(r.read()).hexdigest()
+                    # Streamed: the largest of these is ~470MB.
+                    for chunk in iter(lambda: r.read(1 << 20), b""):
+                        h.update(chunk)
+                digest = h.hexdigest()
+            except ValueError:
+                print(f"    ✗ unknown checksum algorithm '{algo}'")
+                worst = 1
             except Exception as e:
                 print(f"    checksum not checked ({type(e).__name__})")
                 worst = max(worst, 2) if worst != 1 else 1
             else:
                 if digest == sha:
-                    print("    ✓ sha256 matches the pinned value")
+                    print(f"    ✓ {algo} matches the pinned value")
                 else:
-                    print(f"    ✗ sha256 MISMATCH")
+                    print(f"    ✗ {algo} MISMATCH")
                     print(f"      declared {sha}")
                     print(f"      actual   {digest}")
                     worst = 1
@@ -157,8 +150,8 @@ def main():
                     help="Ubuntu codename to substitute (default: from packer variables)")
     ap.add_argument("--only", help="check just this repository by name")
     ap.add_argument("--checksums", action="store_true",
-                    help="also download pinned artifacts and verify their sha256 "
-                         "(slow: BalenaEtcher alone is ~150MB)")
+                    help="also download pinned artifacts and verify their checksums "
+                         "(slow: Nimbalyst alone is ~470MB)")
     a = ap.parse_args()
 
     if not VERIFY.exists():
@@ -230,16 +223,18 @@ def main():
         worst = 1 if 1 in (worst, rc) else max(worst, rc)
         print()
 
-    # 1Password derives its debsig policy directory from the long ID of its
-    # signing key. Nothing about the repository check touches that, and a wrong
-    # value fails silently -- the policy lands where dpkg never looks and the
-    # install still succeeds -- so it is checked against the published key here.
-    debsig = data.get("apps_1password_debsig_key_id")
-    onepw = next((r for r in repos if r.get("name") == "1password"), None)
-    if debsig and onepw and not a.only:
-        print("--- 1password debsig key id")
+    # A debsig policy lives in a directory named after the long ID of the
+    # vendor's signing key. Nothing about the repository check touches that,
+    # and a wrong value fails silently -- the policy lands where dpkg never
+    # looks and the install still succeeds -- so it is checked against the
+    # published key here.
+    for entry in repos:
+        if not entry.get("debsig_key_id") or (a.only and a.only != entry.get("name")):
+            continue
+        print(f"--- {entry.get('name', '?')} debsig key id")
         rc = subprocess.run(
-            ["bash", str(VERIFY), "keyid", onepw.get("key_url", ""), str(debsig)]
+            ["bash", str(VERIFY), "keyid", entry.get("key_url", ""),
+             str(entry["debsig_key_id"])]
         ).returncode
         if rc not in (0, 1, 2):
             print(f"  ! verify-change.sh exited {rc} -- the check did not run")

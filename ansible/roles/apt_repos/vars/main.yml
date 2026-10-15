@@ -1,0 +1,15 @@
+---
+# Every field an apps_apt_repos entry may use. Anything else fails the run, so a
+# misspelt field (key_armored, vendor_source) is caught instead of ignored.
+apt_repos_fields:
+  - name
+  - enabled
+  - key_url
+  - key_path
+  - key_armoured
+  - repo
+  - repo_replaces
+  - vendor_sources
+  - debsig_key_id
+  - debsig_policy_url
+  - packages
