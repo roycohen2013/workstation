@@ -110,6 +110,7 @@ make iso        build an unattended installer ISO
 make test       boot the built image in libvirt and verify
 make apply      converge THIS machine to the config, no reimage
 make apply-check  show what apply would change, without changing it
+make verify     check this machine against what it was last converged to
 make publish    upload to the artifact bucket, move the channel
 make fetch      download the latest published image
 make flash DEV=/dev/sdX   write an image to a disk
@@ -149,7 +150,8 @@ packer/                      build template + autoinstall seed
 iso/                         autoinstall seed for the installer ISO
 terraform/artifacts/         image bucket
 terraform/testlab/           throwaway VM for verifying a build
-tests/goss/                  assertions run inside the image during the build
+tests/goss/                  assertions: shared.yaml after any converge (apply
+                             CI, `make verify`), image.yaml inside the build
 scripts/                     flash, fetch, publish, build-iso
 scripts/doctor.sh            `make doctor` -- environment preflight
 scripts/lint-commit-msg.py   `make lint-commits` -- commit message convention

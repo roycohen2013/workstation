@@ -206,6 +206,14 @@ apply-check: deps ## Show what `make apply` would change, without changing it
 	  $(BECOME_EXE) \
 	  --check --diff --ask-become-pass $(ARGS)
 
+.PHONY: verify
+verify: ## Check THIS machine against what it was last converged to (after make apply)
+	@# The shared goss suite: the same one apply.yml runs on every pull request
+	@# and the image build runs inside image.yaml. It reads the declared set the
+	@# last converge recorded, so run `make apply` first after editing group_vars.
+	@# sudo because some checks read root-only state (debsig keyrings, dconf).
+	sudo tests/goss/run-goss.sh tests/goss/shared.yaml
+
 # --- Documentation -----------------------------------------------------------
 
 .PHONY: verify-repos

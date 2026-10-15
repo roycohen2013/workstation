@@ -1,0 +1,110 @@
+{{- /*
+  Hand-written checks of behaviour no data list describes, each switched on by
+  the feature it belongs to. `features` in /etc/workstation-declared.json is
+  already resolved by roles/manifest -- balena_etcher is false without the
+  desktop, for instance -- so a guard here is only ever a single lookup, never
+  logic of its own.
+
+  Turning a feature off removes its checks instead of failing them, which is
+  what lets a flag flip in group_vars pass without editing goss.
+*/ -}}
+package:
+{{- if .Vars.features.desktop }}
+  # Arrives with ubuntu-desktop-minimal rather than by name; it is what puts a
+  # login screen on a flashed machine.
+  gdm3: { installed: true }
+{{- end }}
+{{- if .Vars.features.claude_desktop }}
+  # Pulled in as recommends by claude-desktop; Cowork is unusable without them.
+  qemu-system-x86: { installed: true }
+  ovmf:            { installed: true }
+{{- end }}
+
+file:
+{{- if .Vars.features.desktop }}
+  /etc/dconf/profile/user:
+    exists: true
+    contents: ["system-db:local"]
+{{- end }}
+  # Installed when the banner is on, removed when it is off, so both outcomes
+  # are checked. It has to be on the image itself: a flashed machine is logged
+  # into long before anything runs `make apply`.
+  /etc/profile.d/zz-workstation-fastfetch.sh:
+    exists: {{ .Vars.features.fastfetch_banner }}
+
+command:
+  # A machine should not be listening for inbound SSH unless asked to. "Not
+  # enabled" rather than "disabled": a machine without openssh-server installed
+  # at all satisfies it, and `systemctl is-enabled` prints nothing there.
+  ssh-server:
+    exec: "systemctl is-enabled --quiet ssh && echo enabled || echo not-enabled"
+    exit-status: 0
+    stdout:
+      equal: "{{ if .Vars.features.ssh_server }}enabled{{ else }}not-enabled{{ end }}\n"
+{{- if .Vars.features.desktop }}
+
+  # The system boots to a desktop, not a text console.
+  graphical-default-target:
+    exec: "systemctl get-default"
+    exit-status: 0
+    stdout:
+      equal: "graphical.target\n"
+
+  # localsearch's postinst re-applies 30-localsearch.conf by name on every
+  # upgrade, which would drop the file-watcher limit to 65536; our same-named
+  # file in /etc shadows it. Both halves are asserted: if a future localsearch
+  # renames its file, the mask silently guards nothing, and this fails instead.
+  # localsearch comes with the desktop, hence the guard.
+  inotify-limit-masks-localsearch:
+    exec: |
+      grep -q '^fs.inotify.max_user_watches' /etc/sysctl.d/30-localsearch.conf \
+        && test -e /usr/lib/sysctl.d/30-localsearch.conf \
+        && echo masked
+    exit-status: 0
+    stdout: ["masked"]
+{{- end }}
+{{- if .Vars.features.wireshark_capture }}
+
+  # Wireshark is only useful if the workstation user can capture without sudo,
+  # and that hinges on a debconf answer that defaults to "no" on an unattended
+  # install. Assert the outcome, not the setting: postinst grants capture via
+  # setcap where the filesystem supports it and falls back to setuid otherwise,
+  # so either is a pass.
+  dumpcap-capture-enabled:
+    exec: |
+      getcap /usr/bin/dumpcap 2>/dev/null | grep -q cap_net_raw && echo enabled && exit 0
+      [ -u /usr/bin/dumpcap ] && echo enabled && exit 0
+      echo disabled
+    exit-status: 0
+    stdout: ["enabled"]
+{{- end }}
+{{- if .Vars.features.balena_etcher }}
+
+  # BalenaEtcher must never launch without --no-sandbox -- see roles/apps for
+  # why. A GUI can't be launched headless, so this checks the wrapper
+  # structure directly: the real binary was moved aside, a wrapper sits where
+  # it used to be, and that wrapper actually names the flag.
+  balena-etcher-no-sandbox-wrapper:
+    exec: |
+      desktop=$(dpkg -L balena-etcher | grep -E '\.desktop$' | head -1)
+      exec_line=$(grep -m1 '^Exec=' "$desktop" | sed 's/^Exec=//')
+      cmd=$(echo "$exec_line" | awk '{print $1}')
+      case "$cmd" in /*) bin="$cmd" ;; *) bin=$(command -v "$cmd") ;; esac
+      real=$(readlink -f "$bin")
+      test -x "${real}.real" || { echo "no .real binary"; exit 1; }
+      grep -q -- '--no-sandbox' "$real" && echo wrapped || echo unwrapped
+    exit-status: 0
+    stdout: ["wrapped"]
+{{- end }}
+
+service:
+{{- if .Vars.features.desktop }}
+  # display-manager is the stable alias; the concrete unit name has moved
+  # between gdm.service and gdm3.service across releases.
+  display-manager:
+    enabled: true
+{{- end }}
+{{- if .Vars.features.docker }}
+  docker:
+    enabled: true
+{{- end }}

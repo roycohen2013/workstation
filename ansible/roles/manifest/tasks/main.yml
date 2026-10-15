@@ -46,11 +46,61 @@
   loop_control:
     label: "{{ item.name }}"
 
-# Each list mirrors the gate its installing role applies: desktop packages only
-# with the desktop, flatpaks only where roles/apps installs them.
+# The keyring path defaults per entry (key_path, else /etc/apt/keyrings/<name>.gpg),
+# which map() cannot express, so it is resolved here the way roles/apt_repos
+# resolves it.
+- name: Collect the keyrings and debsig policies the enabled repositories install
+  ansible.builtin.set_fact:
+    manifest_repo_keyrings: >-
+      {{ manifest_repo_keyrings | default([])
+         + [item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg')] }}
+    manifest_repo_debsig: >-
+      {{ manifest_repo_debsig | default([])
+         + ([{'name': item.name, 'key_id': item.debsig_key_id}]
+            if item.debsig_key_id is defined else []) }}
+  loop: "{{ apt_repos_enabled | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Each entry mirrors the gate its producing role applies -- desktop packages and
+# dconf keys only with the desktop, flatpaks only where roles/apps installs them
+# -- so the record states what this machine should have, already resolved.
+# tests/goss turns it into checks without re-deriving any of it: the templates
+# there only switch on `features` and loop over lists.
 - name: Assemble the declared set
   ansible.builtin.set_fact:
     manifest_declared:
+      schema: 2
+      user: "{{ workstation_user }}"
+      # A minimum: base adds groups with append and never removes one, so a
+      # lived-in machine legitimately carries others.
+      user_groups: >-
+        {{ (workstation_user_groups
+            + (['docker'] if workstation_docker_enabled | bool else [])
+            + (['wireshark'] if workstation_desktop_enabled | bool
+                and desktop_wireshark_capture_as_user | bool else [])
+            + (['kvm'] if workstation_claude_desktop_enabled | bool else [])
+           ) | unique | sort }}
+      features:
+        desktop: "{{ workstation_desktop_enabled | bool }}"
+        docker: "{{ workstation_docker_enabled | bool }}"
+        claude_desktop: "{{ workstation_claude_desktop_enabled | bool }}"
+        balena_etcher: >-
+          {{ workstation_balena_etcher_enabled | bool and workstation_desktop_enabled | bool }}
+        wireshark_capture: >-
+          {{ workstation_desktop_enabled | bool and desktop_wireshark_capture_as_user | bool }}
+        ssh_server: "{{ workstation_ssh_server_enabled | bool }}"
+        fastfetch_banner: "{{ base_fastfetch_on_login | bool }}"
+      dconf: "{{ desktop_dconf if workstation_desktop_enabled | bool else [] }}"
+      sysctl: "{{ base_sysctl | dict2items }}"
+      aliases: "{{ base_shell_aliases }}"
+      keyrings: "{{ manifest_repo_keyrings | default([]) | sort }}"
+      # Repositories whose vendor's .sources file replaces ours after install:
+      # exactly one declaration of each must remain. See roles/apt_repos.
+      vendor_sources: >-
+        {{ apt_repos_enabled | default([]) | selectattr('vendor_sources', 'defined')
+           | selectattr('vendor_sources') | map(attribute='name') | sort }}
+      debsig: "{{ manifest_repo_debsig | default([]) }}"
       apt: >-
         {{ (apps_apt_base
             + apps_apt_dev
@@ -66,10 +116,10 @@
       snap: "{{ apps_snap | map(attribute='name') | sort }}"
       absent: "{{ apps_apt_absent | sort }}"
 
-# Compared against satisfied_names rather than real package names alone: a
-# declaration may legitimately name a virtual package, and comparing only
-# against installed package names would report it missing while it is plainly
-# there. See the Provides handling in capture-manifest.py.
+# Compared against satisfied_names rather than real package names alone, so a
+# declared name that only another package Provides is not misreported as
+# missing -- it is reported below as what it is instead. See the Provides
+# handling in capture-manifest.py.
 - name: Identify declared packages missing from the image
   ansible.builtin.set_fact:
     manifest_missing:
@@ -80,6 +130,19 @@
       snap: >-
         {{ manifest_declared.snap
            | difference(manifest_data.packages.snap | map(attribute='name')) }}
+
+# A declared name must be a real package. One that only exists because another
+# package Provides it -- a transitional name a release dropped, as p7zip-full
+# and dnsutils were in 26.04 -- still installs, since apt resolves it, but
+# nothing that asks dpkg about the name itself can see it: the image tests in
+# tests/goss fail on it, after a converge that reported success. Failing here
+# names the package to declare instead.
+- name: Identify declared packages that only another package provides
+  ansible.builtin.set_fact:
+    manifest_provided_only: >-
+      {{ manifest_declared.apt
+         | difference(manifest_data.packages.apt | map(attribute='name'))
+         | intersect(manifest_data.satisfied_names) }}
 
 - name: Identify packages that were declared for removal but are still present
   ansible.builtin.set_fact:
@@ -92,6 +155,7 @@
       - manifest_missing.apt | length == 0
       - manifest_missing.flatpak | length == 0
       - manifest_missing.snap | length == 0
+      - manifest_provided_only | length == 0
       - manifest_not_removed | length == 0
     fail_msg: >-
       Image does not match what group_vars declares.
@@ -100,6 +164,11 @@
       Check it exists for this release --
       .claude/skills/config-change/scripts/verify-change.sh {{ kind }}
       {{ manifest_missing[kind] | join(' ') }}
+      {% endfor %}
+      {% for name in manifest_provided_only %}
+      Declared apt name {{ name }} is not a real package: it is only provided by
+      {{ manifest_data.packages.apt | selectattr('provides', 'contains', name)
+         | map(attribute='name') | join(', ') }}. Declare that instead.
       {% endfor %}
       {% if manifest_not_removed | length %}
       Declared in apps_apt_absent but still present:

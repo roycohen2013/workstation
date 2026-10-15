@@ -226,8 +226,9 @@
 #
 # If debsig_key_id is wrong, these files land in a directory dpkg never
 # consults and the policy is silently inert. apt install still succeeds, which
-# is why goss asserts the paths and `make verify-repos` checks the id against
-# the published key, rather than trusting either.
+# is why goss asserts the paths (from the declared set roles/manifest records)
+# and `make verify-repos` checks the id against the published key, rather than
+# trusting either.
 - name: Create debsig directories
   ansible.builtin.file:
     path: "{{ item.1 }}/{{ item.0.debsig_key_id }}"
@@ -237,24 +238,6 @@
     {{ apt_repos_debsig | product(['/etc/debsig/policies', '/usr/share/debsig/keyrings']) | list }}
   loop_control:
     label: "{{ item.0.name }} {{ item.1 }}"
-
-- name: Create the debsig record directory
-  ansible.builtin.file:
-    path: /etc/workstation-debsig
-    state: directory
-    mode: "0755"
-  when: apt_repos_debsig | length > 0
-
-# Recorded so the image test asserts against the id actually used, rather than
-# duplicating the constant into the test suite where the two could drift.
-- name: Record the debsig key id used
-  ansible.builtin.copy:
-    content: "{{ item.debsig_key_id }}\n"
-    dest: "/etc/workstation-debsig/{{ item.name }}"
-    mode: "0644"
-  loop: "{{ apt_repos_debsig }}"
-  loop_control:
-    label: "{{ item.name }}"
 
 - name: Install debsig policies
   ansible.builtin.get_url:

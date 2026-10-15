@@ -49,5 +49,5 @@ These are the non-obvious parts, and both are easy to lose in a refactor:
   ships only the storage drivers the *build* machine needed. On unfamiliar
   hardware the kernel then cannot find its own root filesystem.
 
-Both are asserted in `tests/goss/workstation.yaml`, so a regression fails the
-build rather than a laptop.
+Both are asserted in `tests/goss/shared.yaml`, so a regression fails the
+required `apply` check on a pull request, and the build, rather than a laptop.

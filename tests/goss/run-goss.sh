@@ -1,38 +1,59 @@
 #!/usr/bin/env bash
-# Downloads goss and runs the image assertions from inside the build VM.
+# Runs a goss suite against the machine it is on:
+#   - inside the Packer build VM, as the image's last test (image.yaml)
+#   - on the GitHub runner after apply.yml's converge (shared.yaml)
+#   - on this machine after `make apply`, via `make verify` (shared.yaml)
+#
+#   run-goss.sh <suite.yaml>
 #
 # goss is a single static binary with YAML assertions, which is why it is used
-# here rather than testinfra: it needs no Python, no pip, and leaves nothing
-# behind in the image once this script removes it.
+# rather than testinfra: it needs no Python and leaves nothing behind once this
+# script exits.
+#
+# The suites are templates over the declared set roles/manifest recorded in
+# /etc/workstation-declared.json, passed here as goss's --vars. The file must
+# already exist -- this script never generates it -- so a machine is checked
+# against what it was last converged to, not against whatever group_vars says
+# now.
 set -euo pipefail
 
-GOSS_VERSION="${GOSS_VERSION:-v0.4.9}"
-GOSS_FILE="${GOSS_FILE:-/tmp/goss/workstation.yaml}"
-GOSS_BIN=/tmp/goss/goss
-GOSS_VARS="${GOSS_VARS:-/etc/workstation-declared.json}"
+suite="${1:?usage: run-goss.sh <suite.yaml>}"
+vars="${GOSS_VARS:-/etc/workstation-declared.json}"
+
+# The pin lives in versions.env. In a checkout it is read from there; inside
+# the Packer VM this script runs from a temporary path with no repo around it,
+# so Packer passes the same two values in the environment instead.
+versions="$(dirname "$0")/../../versions.env"
+if [ -z "${GOSS_VERSION:-}" ] && [ -r "$versions" ]; then
+    while IFS='=' read -r key value; do
+        case "$key" in
+            GOSS_VERSION) GOSS_VERSION="$value" ;;
+            GOSS_SHA256)  GOSS_SHA256="$value" ;;
+        esac
+    done < <(grep -E '^GOSS_[A-Z0-9_]+=' "$versions")
+fi
+: "${GOSS_VERSION:?not set and no versions.env found}"
+: "${GOSS_SHA256:?not set and no versions.env found}"
+
+if [ ! -r "$vars" ]; then
+    echo "error: $vars not found." >&2
+    echo "roles/manifest writes it at the end of a converge -- run \`make apply\` first." >&2
+    exit 1
+fi
+
+# A fresh directory, removed on every exit path, so the test binary never
+# outlives the run -- above all inside the image, where it would ship.
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
 
 echo "==> Fetching goss ${GOSS_VERSION}"
-curl -fsSL -o "$GOSS_BIN" \
+curl -fsSL -o "$work/goss" \
   "https://github.com/goss-org/goss/releases/download/${GOSS_VERSION}/goss-linux-amd64"
-chmod +x "$GOSS_BIN"
+# Verified like every other pinned download here: a release URL alone proves
+# nothing about what it served.
+echo "${GOSS_SHA256}  $work/goss" | sha256sum --check --quiet -
+chmod +x "$work/goss"
 
-# The gossfile is templated; give it the account name the image was built for
-# instead of duplicating that setting in the test suite.
-# shellcheck disable=SC1091
-. /etc/workstation-release
-export WS_USER="${WORKSTATION_USER:?/etc/workstation-release did not define WORKSTATION_USER}"
-
-echo "==> Validating image against ${GOSS_FILE} (user=${WS_USER})"
-# `|| status=$?` rather than a bare call: with `set -e` a failing goss run
-# would exit here and skip the cleanup below, leaving the test binary behind
-# in the image on exactly the runs where something went wrong.
-status=0
-# --vars feeds declared.goss.tmpl the set roles/manifest recorded, so the
-# image is tested against everything group_vars declares rather than a copy.
-"$GOSS_BIN" --gossfile "$GOSS_FILE" --vars "$GOSS_VARS" \
-  validate --format documentation --max-concurrent 4 || status=$?
-
-echo "==> Removing test tooling from the image"
-rm -rf /tmp/goss
-
-exit "$status"
+echo "==> Validating $(basename "$suite") against $vars"
+"$work/goss" --gossfile "$suite" --vars "$vars" \
+  validate --format documentation --max-concurrent 4

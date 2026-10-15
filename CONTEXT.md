@@ -102,6 +102,20 @@ _Avoid_: intended, wanted, specified
 What `dpkg` reports is actually on a machine.
 _Avoid_: actual, present
 
+**Declared set**:
+Everything `group_vars` declares for one machine, resolved for its flags and
+recorded by `roles/manifest` in `/etc/workstation-declared.json`: packages,
+features, dconf keys, sysctl, aliases, groups, keyrings. What the goss suite
+reads to know what to check.
+_Avoid_: expected state, desired state
+
+**Shared suite**:
+The goss checks that hold after any converge, in either phase:
+`tests/goss/shared.yaml`, run by `make verify`, the `apply` check and the build.
+The **image-only suite** (`tests/goss/image.yaml`) adds what only a sealed image
+satisfies. See ADR-0004.
+_Avoid_: live tests, smoke tests
+
 **Missing**:
 Declared but not installed. Fails the build — this is the condition the drift
 check exists to catch.
