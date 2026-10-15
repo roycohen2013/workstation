@@ -107,7 +107,14 @@ succeeds, which is why goss asserts the paths rather than trusting them. |
 duplicating the constant into the test suite where the two could drift. |
 | Install 1Password debsig policy | ansible.builtin.get_url | True |  |
 | Install 1Password debsig keyring | ansible.builtin.command | True |  |
-| Install packages from third-party repositories | ansible.builtin.apt | True |  |
+| Install packages from third-party repositories | ansible.builtin.apt | True | latest, not present: base upgrades everything before these repositories
+are added, so a package already installed from elsewhere -- a .deb fetched
+by hand, or the GitHub runner's preinstalled docker-ce and Chrome -- would
+count as present at its old version and only catch up on the next converge.
+CI's idempotence pass reported exactly that as base's upgrade changing every
+run. Where the package is new or already current this is the same as present.
+package-latest guards against unpinned drift; base's dist-upgrade already
+takes every package to latest on every converge, so this adds none. |
 | Check again which vendors now manage their own apt source | ansible.builtin.stat | False | Checked again now, not reused from the check above. On a first converge --
 every image build, and every CI runner -- that check ran before the vendor's
 package was installed, so it was false: our .list was written to bootstrap,
