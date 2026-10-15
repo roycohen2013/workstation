@@ -77,8 +77,8 @@ for the same origin, with a different key, conflicts just the same. A `.sources`
 `Signed-By:` field: either a path, or an inline key block that counts as a
 different value from any path.
 
-**Fix.** `make apply` removes the `<name>.list` of every repository it
-manages, HashiCorp's included, and `group_vars` uses HashiCorp's documented
+**Fix.** `make apply` removes the `<name>.list` of every repository whose
+source it owns, HashiCorp's included, and `group_vars` uses HashiCorp's documented
 `key_path`, so following their instructions again afterwards adds a duplicate
 rather than a conflict. `make doctor` reports any origin declared with more than one key,
 in either format, naming each key and the file it came from. To clear a

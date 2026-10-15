@@ -282,7 +282,7 @@ touching anything, so a missing or misspelt field fails the run up front.
 - `name`: the entry's name. Our source file is a deb822
   sources.list.d/workstation-<name>.sources, and the keyring defaults to
   /etc/apt/keyrings/<name>.gpg. A one-line <name>.list, which older
-  versions wrote, is removed.
+  versions wrote, is removed -- except under `vendor_sources`, below.
 - `enabled`: optional feature switch.
 - `key_url`: the vendor's signing key, fetched on every converge so a
   rotated key is picked up.
@@ -296,9 +296,10 @@ touching anything, so a missing or misspelt field fails the run up front.
   because it fails later as a signature error that reads like a network
   fault.
 - `vendor_sources`: the vendor's package writes its own deb822 source at
-  sources.list.d/<name>.sources on every install and upgrade. Our entry then
-  only bootstraps the first install and is removed once theirs exists.
-  Without it the origin stays declared twice.
+  sources.list.d/<name>.sources. Our entry then only bootstraps the first
+  install, as the one-line <name>.list the vendor's postinst takes over, and
+  is removed once theirs exists. Without it the origin stays declared
+  twice.
 - `vendor_opt_out`: a setting that stops the vendor's package adding an apt
   source of its own, as `file`, `setting` and `value`. Written before the
   package installs, because its postinst reads it.

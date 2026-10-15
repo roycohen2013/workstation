@@ -116,8 +116,15 @@ would leave each origin declared twice for good.
 Our entry is only needed to bootstrap: once the vendor's .sources exists it
 is authoritative and ours is redundant. So entries marked vendor_sources in
 group_vars stop being declared here once that file exists, and our leftover
-bootstrap source is removed after the packages install, below -- leaving
-exactly one declaration of each origin. |
+bootstrap .list is removed after the packages install, below -- leaving
+exactly one declaration of each origin.
+
+That bootstrap stays a one-line <name>.list, not deb822, because it is what
+the vendors' postinst looks for. Chrome's writes google-chrome.sources on an
+upgrade only by migrating a google-chrome.list it recognises, once
+/etc/default/google-chrome exists -- CI's runner ships Chrome preinstalled,
+and without the .list it kept our source and never wrote its own.
+1Password's comments the .list out. |
 | Note which vendors own their apt source | ansible.builtin.set_fact | False |  |
 | Install the deb822 sources library | ansible.builtin.apt | False | deb822_repository parses and writes sources through python3-debian.
 Installed before the old .list files go, so a failure here leaves the
@@ -130,17 +137,22 @@ one-line sources.list.d/<name>.list. That module is deprecated in favour of
 deb822_repository, so sources are now deb822 files -- and the .list is
 removed first, or apt would read every repository twice and warn about it
 on each update. A <name>.list someone wrote by hand from the vendor's
-install docs (HashiCorp's, for one) goes too: it declares the same origin. |
+install docs (HashiCorp's, for one) goes too: it declares the same origin.
+Not for vendor_sources entries, whose .list is still the bootstrap above. |
 | Translate repository lines into deb822 fields | ansible.builtin.set_fact | False | The one-line `repo` in group_vars stays the single source of truth -- it is
 what vendors document and what scripts/verify-repos.py checks -- and is split
 into deb822 fields here. The assert above has already checked its shape. |
 | Add repositories | ansible.builtin.deb822_repository | True | Named workstation-<name>, never plain <name>, for two reasons:
-- <name>.sources is exactly where vendor_sources vendors write their own
+- <name>.sources is exactly where some vendors' packages write their own
 file, and the stat above tells the two apart by that path. Sharing it
 would hand the file back and forth between us and their postinst.
 - deb822_repository derives a keyring path from the same name, and with
 state=absent deletes /etc/apt/keyrings/<name>.gpg -- the very keyring
 this role installs for the default key_path. |
+| Add bootstrap sources for vendors that replace them | ansible.builtin.copy | False | The vendor_sources bootstrap, until the vendor's own .sources exists: the
+repo line verbatim, as the one-line .list its postinst knows how to take
+over. Written as a file rather than with apt_repository, which is
+deprecated. |
 | Refresh the package lists after a source changed | ansible.builtin.apt | True | Refreshed here rather than by a handler: the packages below install from
 these repositories, and a handler would not run until the end of the play.
 deb822_repository, unlike apt_repository, never refreshes the cache itself. |

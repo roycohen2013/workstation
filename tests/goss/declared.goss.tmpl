@@ -99,7 +99,7 @@ command:
 {{- range .Vars.vendor_sources }}
   # Exactly one apt declaration of this origin: the vendor's deb822 file.
   # Its postinst writes it, and roles/apt_repos then removes our bootstrap
-  # workstation-<name>.sources. Ours back on disk, or a one-line .list, means
+  # <name>.list. That .list back on disk, or a deb822 source of ours, means
   # the origin is declared twice and every `make apply` reports a change.
   {{ printf "%s-single-apt-source" . | printf "%q" }}:
     exec: {{ printf "test -s /etc/apt/sources.list.d/%s.sources && test ! -e /etc/apt/sources.list.d/workstation-%s.sources && test ! -e /etc/apt/sources.list.d/%s.list && echo single" . . . | printf "%q" }}

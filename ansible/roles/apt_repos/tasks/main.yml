@@ -5,10 +5,11 @@
 #
 # Each entry goes through the same lifecycle, in this order:
 #   1. its signing key is fetched, cached, and installed at its keyring path
-#   2. the one-line .list an older version of this role wrote is removed
-#   3. its source is written as deb822, to workstation-<name>.sources --
-#      unless the vendor's own .sources file has already taken over
-#      (vendor_sources)
+#   2. the one-line .list an older version of this role wrote is removed,
+#      unless that .list is a vendor_sources bootstrap
+#   3. its source is written as deb822, to workstation-<name>.sources -- or,
+#      for vendor_sources, as a one-line bootstrap <name>.list until the
+#      vendor's own .sources file has taken over
 #   4. its debsig policy is installed, if it declares one
 #   5. the vendor's package is told not to add a source of its own
 #      (vendor_opt_out), then its packages are installed at the repository's
@@ -189,8 +190,15 @@
 # Our entry is only needed to bootstrap: once the vendor's .sources exists it
 # is authoritative and ours is redundant. So entries marked vendor_sources in
 # group_vars stop being declared here once that file exists, and our leftover
-# bootstrap source is removed after the packages install, below -- leaving
+# bootstrap .list is removed after the packages install, below -- leaving
 # exactly one declaration of each origin.
+#
+# That bootstrap stays a one-line <name>.list, not deb822, because it is what
+# the vendors' postinst looks for. Chrome's writes google-chrome.sources on an
+# upgrade only by migrating a google-chrome.list it recognises, once
+# /etc/default/google-chrome exists -- CI's runner ships Chrome preinstalled,
+# and without the .list it kept our source and never wrote its own.
+# 1Password's comments the .list out.
 - name: Check which vendors already manage their own apt source
   ansible.builtin.stat:
     path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
@@ -204,6 +212,14 @@
     apt_repos_vendor_owned: >-
       {{ apt_repos_vendor_sources.results | selectattr('stat.exists')
          | map(attribute='item.name') | list }}
+    apt_repos_vendor_bootstrap: >-
+      {{ apt_repos_vendor_sources.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}
+    # Everything that is not vendor_sources: its source is ours, as deb822.
+    apt_repos_own_sources: >-
+      {{ apt_repos_enabled | rejectattr('name', 'in',
+           apt_repos_vendor_sources.results | map(attribute='item.name') | list)
+         | list }}
 
 # deb822_repository parses and writes sources through python3-debian.
 # Installed before the old .list files go, so a failure here leaves the
@@ -230,11 +246,12 @@
 # removed first, or apt would read every repository twice and warn about it
 # on each update. A <name>.list someone wrote by hand from the vendor's
 # install docs (HashiCorp's, for one) goes too: it declares the same origin.
+# Not for vendor_sources entries, whose .list is still the bootstrap above.
 - name: Remove one-line sources an older version of this role wrote
   ansible.builtin.file:
     path: "/etc/apt/sources.list.d/{{ item.name }}.list"
     state: absent
-  loop: "{{ apt_repos_enabled }}"
+  loop: "{{ apt_repos_own_sources }}"
   loop_control:
     label: "{{ item.name }}"
   register: apt_repos_legacy_removed
@@ -261,12 +278,12 @@
       {{ _repo | regex_findall('^deb [[]([^]]*)[]]') | first }}
     _words: >-
       {{ (_repo | regex_replace('^deb [[][^]]*[]] ', '')).split() }}
-  loop: "{{ apt_repos_enabled }}"
+  loop: "{{ apt_repos_own_sources }}"
   loop_control:
     label: "{{ item.name }}"
 
 # Named workstation-<name>, never plain <name>, for two reasons:
-#   - <name>.sources is exactly where vendor_sources vendors write their own
+#   - <name>.sources is exactly where some vendors' packages write their own
 #     file, and the stat above tells the two apart by that path. Sharing it
 #     would hand the file back and forth between us and their postinst.
 #   - deb822_repository derives a keyring path from the same name, and with
@@ -283,13 +300,25 @@
     signed_by: "{{ apt_repos_deb822[item.name].signed_by }}"
     mode: "0644"
     state: present
-  loop: "{{ apt_repos_enabled }}"
+  loop: "{{ apt_repos_own_sources }}"
   loop_control:
     label: "{{ item.name }}"
-  when:
-    - item.name not in apt_repos_vendor_owned
-    - not (ansible_check_mode and apt_repos_debian_lib is changed)
+  when: not (ansible_check_mode and apt_repos_debian_lib is changed)
   register: apt_repos_added
+
+# The vendor_sources bootstrap, until the vendor's own .sources exists: the
+# repo line verbatim, as the one-line .list its postinst knows how to take
+# over. Written as a file rather than with apt_repository, which is
+# deprecated.
+- name: Add bootstrap sources for vendors that replace them
+  ansible.builtin.copy:
+    content: "{{ item.repo | trim }}\n"
+    dest: "/etc/apt/sources.list.d/{{ item.name }}.list"
+    mode: "0644"
+  loop: "{{ apt_repos_vendor_bootstrap }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: apt_repos_bootstrapped
 
 # Refreshed here rather than by a handler: the packages below install from
 # these repositories, and a handler would not run until the end of the play.
@@ -297,7 +326,9 @@
 - name: Refresh the package lists after a source changed
   ansible.builtin.apt:
     update_cache: true
-  when: apt_repos_added is changed or apt_repos_legacy_removed is changed
+  when: >-
+    apt_repos_added is changed or apt_repos_legacy_removed is changed
+    or apt_repos_bootstrapped is changed
 
 # debsig-verify policies, for entries that declare debsig_key_id. Where apt
 # verifies the repository, debsig verifies the .deb's own signature -- so the
@@ -388,7 +419,7 @@
 
 - name: Remove our bootstrap apt source where the vendor's has replaced it
   ansible.builtin.file:
-    path: "/etc/apt/sources.list.d/workstation-{{ item.item.name }}.sources"
+    path: "/etc/apt/sources.list.d/{{ item.item.name }}.list"
     state: absent
   loop: "{{ apt_repos_vendor_sources_installed.results | selectattr('stat.exists') | list }}"
   loop_control:
