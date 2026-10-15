@@ -188,6 +188,20 @@ command:
     exit-status: 0
     stdout: ["installed"]
 
+  # Exactly one apt declaration of the 1Password origin: the vendor's deb822
+  # file, with our bootstrap .list cleaned up in the same converge. A leftover
+  # .list is harmless to apt -- the postinst comments it out -- but it ships in
+  # every image and makes the first `make apply` on each machine report a
+  # change. Fails, too, if a future postinst stops writing .sources: worth
+  # hearing about, since the role then keeps our .list as the working source.
+  1password-single-apt-source:
+    exec: |
+      test -s /etc/apt/sources.list.d/1password.sources \
+        && test ! -e /etc/apt/sources.list.d/1password.list \
+        && echo single
+    exit-status: 0
+    stdout: ["single"]
+
   # VS Code must come from apt only. A leftover snap would put a second copy on
   # the image with its own updater, and nothing else here would notice.
   vscode-not-also-a-snap:

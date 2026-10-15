@@ -84,9 +84,9 @@ idempotence pass reported "Add repositories" changed forever because of it.
 
 Our entry is only needed to bootstrap: once their .sources exists, it is
 authoritative and ours is redundant. So stop declaring it, and remove the
-commented-out leftover so exactly one declaration of the origin remains. |
+commented-out leftover so exactly one declaration of the origin remains --
+after the package installs, below, not here. |
 | Add repositories | ansible.builtin.apt_repository | True |  |
-| Remove our redundant 1Password apt source | ansible.builtin.file | True |  |
 | Create 1Password debsig directories | ansible.builtin.file | True | 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 addition to apt verifying the repository -- so it has to be in place before
 the package installs, not after.
@@ -104,6 +104,15 @@ If its version wins and names a keyring we never created, every later apt
 update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
 that, so it has to exist BEFORE the package installs. |
 | Install packages from third-party repositories | ansible.builtin.apt | True |  |
+| Check again whether 1Password now manages its own apt source | ansible.builtin.stat | False | Checked again now, not reused from the check above. On a first converge --
+every image build, and every CI runner -- that check ran before 1Password
+was installed, so it was false: our .list was written to bootstrap, then the
+postinst wrote .sources and commented ours out. Reusing that stale answer
+skipped the cleanup, shipped the dead .list in every image, and left it for
+the second converge to delete, which made CI's idempotence pass report a
+change on every run. If a future postinst ever stops writing .sources, this
+stays false and our .list is kept: apt still has a working source. |
+| Remove our redundant 1Password apt source | ansible.builtin.file | True |  |
 | Add the workstation user to the kvm group for Cowork | ansible.builtin.user | True | Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 the latter -- so joining the group is required even where /dev/kvm alone is

@@ -114,7 +114,8 @@
 #
 # Our entry is only needed to bootstrap: once their .sources exists, it is
 # authoritative and ours is redundant. So stop declaring it, and remove the
-# commented-out leftover so exactly one declaration of the origin remains.
+# commented-out leftover so exactly one declaration of the origin remains --
+# after the package installs, below, not here.
 - name: Check whether 1Password now manages its own apt source
   ansible.builtin.stat:
     path: /etc/apt/sources.list.d/1password.sources
@@ -133,12 +134,6 @@
   loop_control:
     label: "{{ item.name }}"
   when: not (item.name == '1password' and apps_1password_own_source.stat.exists)
-
-- name: Remove our redundant 1Password apt source
-  ansible.builtin.file:
-    path: /etc/apt/sources.list.d/1password.list
-    state: absent
-  when: apps_1password_own_source.stat.exists
 
 # 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 # addition to apt verifying the repository -- so it has to be in place before
@@ -202,6 +197,25 @@
     name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"
     state: present
   when: apps_repos_enabled | length > 0
+
+# Checked again now, not reused from the check above. On a first converge --
+# every image build, and every CI runner -- that check ran before 1Password
+# was installed, so it was false: our .list was written to bootstrap, then the
+# postinst wrote .sources and commented ours out. Reusing that stale answer
+# skipped the cleanup, shipped the dead .list in every image, and left it for
+# the second converge to delete, which made CI's idempotence pass report a
+# change on every run. If a future postinst ever stops writing .sources, this
+# stays false and our .list is kept: apt still has a working source.
+- name: Check again whether 1Password now manages its own apt source
+  ansible.builtin.stat:
+    path: /etc/apt/sources.list.d/1password.sources
+  register: apps_1password_own_source_installed
+
+- name: Remove our redundant 1Password apt source
+  ansible.builtin.file:
+    path: /etc/apt/sources.list.d/1password.list
+    state: absent
+  when: apps_1password_own_source_installed.stat.exists
 
 # Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 # It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
