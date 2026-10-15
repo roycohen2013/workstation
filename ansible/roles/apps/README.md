@@ -38,7 +38,7 @@ already accessible.
 This lives here, not in workstation_user_groups, because roles/base creates
 the user long before these packages exist: the kvm group is created by the
 qemu recommends pulled in just above, so joining it any earlier fails. |
-| Find BalenaEtcher's desktop launcher | ansible.builtin.shell | True | --- BalenaEtcher ---------------------------------------------------------
+| Install the launcher-binary helper | ansible.builtin.copy | True | --- BalenaEtcher ---------------------------------------------------------
 Downloaded and installed by roles/pinned_downloads, which runs before this
 role; what follows only makes it launch.
 
@@ -51,12 +51,13 @@ rather than left to whoever launches it to remember, because the failure
 mode without it is Etcher not starting at the exact moment you are trying
 to flash a drive.
 
-The binary to wrap is discovered from the package's own .desktop file
-rather than a hardcoded path: electron-builder's install layout has varied
-across releases, and a guessed path that turns out wrong would silently
-skip the wrapper instead of failing loudly. |
-| Read its Exec line | ansible.builtin.shell | True |  |
-| Resolve the real binary the launcher points at | ansible.builtin.shell | True |  |
+The binary to wrap is discovered from the package's own .desktop file by
+files/launcher-binary.sh, rather than from a hard-coded path: electron-
+builder's install layout has varied across releases, and a guessed path that
+turns out wrong would silently skip the wrapper instead of failing loudly.
+Installed rather than run from here because the image test checks the
+wrapper with the same script, so the two agree on which file is the binary. |
+| Resolve the real binary BalenaEtcher's launcher runs | ansible.builtin.command | True |  |
 | Fail loudly if the real binary could not be resolved | ansible.builtin.assert | True |  |
 | Move the real binary aside | ansible.builtin.shell | True | Keyed on what is at <binary> now, not on whether <binary>.real exists.
 dpkg does not track .real, so a version bump writes the NEW binary over our
