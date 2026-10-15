@@ -82,6 +82,11 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Fixed
 
+- `make doctor` now catches an apt origin declared with two different keys
+  when one declaration is a deb822 `.sources` file, such as Chrome's,
+  1Password's or Ubuntu's own `ubuntu.sources`. Before, it read only one-line
+  `.list` entries, so a leftover `.list` line beside a vendor's `.sources`
+  file went unreported even though apt refuses to read any of its sources.
 - `make verify-repos` now checks Nimbalyst's pinned AppImage, which it had
   never covered, and `--checksums` verifies its sha512 rather than assuming
   every pin is sha256.
