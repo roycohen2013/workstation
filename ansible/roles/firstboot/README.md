@@ -28,14 +28,16 @@ Description: One-shot hook that adapts a generic image to the machine it was wri
 
 #### File: tasks/main.yml
 
-| Name | Module | Has Conditions |
-| ---- | ------ | -------------- |
-| Install first-boot dependencies | ansible.builtin.apt | False |
-| Install first-boot script | ansible.builtin.template | False |
-| Install first-boot service | ansible.builtin.copy | False |
-| Create state directory | ansible.builtin.file | False |
-| Arm the first-boot hook | ansible.builtin.file | False |
-| Enable the first-boot service | ansible.builtin.systemd | False |
+| Name | Module | Has Conditions | Comments |
+| ---- | ------ | -------------- | -------- |
+| Install first-boot dependencies | ansible.builtin.apt | False |  |
+| Create the first-boot steps directory | ansible.builtin.file | False | Where roles drop their own first-boot steps, from their tasks/seal.yml. Made
+here, before roles/seal runs those, so every step has somewhere to land. |
+| Install first-boot script | ansible.builtin.template | False |  |
+| Install first-boot service | ansible.builtin.copy | False |  |
+| Create state directory | ansible.builtin.file | False |  |
+| Arm the first-boot hook | ansible.builtin.file | False |  |
+| Enable the first-boot service | ansible.builtin.systemd | False |  |
 
 
 

@@ -26,6 +26,23 @@ Description: Strips machine identity and build residue so the artifact is a clea
 ### Tasks
 
 
+#### File: tasks/hooks.yml
+
+| Name | Module | Has Conditions | Comments |
+| ---- | ------ | -------------- | -------- |
+| Find each role's image-phase hook | ansible.builtin.set_fact | False | Every roles/<role>/tasks/seal.yml, found rather than listed, so a role adds
+its image-phase cleanup -- and the first-boot step that undoes it on the
+target machine -- without editing this file. A hook runs whether or not its
+role did (the desktop can be switched off), so each must be safe either way.
+Sorted, so the order is the same on every build.
+
+filetree, not fileglob: fileglob expands a wildcard only in the file name,
+never in a directory, so roles/*/tasks/seal.yml silently matches nothing and
+every hook is skipped. Both read the controller, where Packer's roles live. |
+| Refuse to seal without finding any hooks | ansible.builtin.assert | False | An empty list would make every role's cleanup silently stop happening, which
+is exactly how the fileglob version above failed; it must never pass quietly. |
+| Run each role's image-phase hook | ansible.builtin.include_role | False |  |
+
 #### File: tasks/main.yml
 
 | Name | Module | Has Conditions | Comments |
@@ -33,6 +50,7 @@ Description: Strips machine identity and build residue so the artifact is a clea
 | Confirm this is a build image | ansible.builtin.stat | False |  |
 | Refuse to seal anything that is not a build image | ansible.builtin.assert | False |  |
 | Record image metadata | ansible.builtin.copy | False |  |
+| Run each role's image-phase hook | ansible.builtin.import_tasks | False | --- Each role's own image-phase half ----------------------------------------- |
 | Remove packages nothing depends on | ansible.builtin.apt | False | --- Package caches -----------------------------------------------------------
 autoremove only. The apt module runs one cleanup per task and then exits, so
 this used to say `autoclean: true` as well and never autoremoved anything:
@@ -43,16 +61,6 @@ not needed -- the task below deletes the downloaded .debs outright. |
 Every machine written from this image must generate its own. Sharing a
 machine-id means colliding DHCP leases and indistinguishable journal
 identities across every laptop and VM built from the same artifact. |
-| Disable the SSH server in the image | ansible.builtin.systemd | False | The security role cannot do this during a build -- Packer is connected over
-the very service it would be stopping -- so it lands here instead. Disabling
-(not stopping) keeps the current session alive until shutdown. |
-| Remove SSH host keys | ansible.builtin.shell | False |  |
-| Remove any desktop info stamp | ansible.builtin.file | False | The desktop info stamp names one machine's hostname and IP. It can only be
-written by a logged-in graphical session, which a Packer build does not have,
-so in practice it should never exist here -- removed anyway rather than
-resting on that reasoning, because it lives under a home directory that IS in
-the image, and a wallpaper announcing the build VM's identity on every
-flashed laptop is exactly the class of defect seal exists to prevent. |
 | Clean cloud-init state | ansible.builtin.command | False | --- cloud-init ---------------------------------------------------------------
 cloud-init did its job during the install. Left enabled, it would try to
 reconfigure networking and users on the target machine at every boot. |

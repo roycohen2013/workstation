@@ -4,8 +4,8 @@
 # These packages are installed into EVERY image, VM builds included, because
 # the image is meant to be flashable onto metal -- a VM-built image
 # missing linux-firmware is a laptop with no Wi-Fi. What is conditional is
-# whether the power and thermal *services* run, which firstboot decides on the
-# target machine rather than here.
+# whether the power and thermal *services* run: decided here on a live machine,
+# and by the first-boot step tasks/seal.yml installs on a flashed one.
 
 - name: Install hardware support packages
   ansible.builtin.apt:
@@ -27,14 +27,5 @@
   when: workstation_phase == 'live'
   failed_when: false
 
-# Leave them disabled in the artifact; firstboot enables them if it finds
-# itself on real hardware.
-- name: Leave power services disabled in the image
-  ansible.builtin.systemd:
-    name: "{{ item }}"
-    enabled: false
-  loop:
-    - tlp
-    - thermald
-  when: workstation_phase == 'image'
-  failed_when: false
+# In the image they are left disabled, and the target machine's first boot
+# decides -- both in tasks/seal.yml, which roles/seal runs.

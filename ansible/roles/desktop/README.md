@@ -83,6 +83,18 @@ first version, which is the rule earning its place. |
 | Install flatpak | ansible.builtin.apt | True |  |
 | Add flathub remote | community.general.flatpak_remote | True |  |
 
+#### File: tasks/seal.yml
+
+| Name | Module | Has Conditions | Comments |
+| ---- | ------ | -------------- | -------- |
+| Remove any desktop info stamp | ansible.builtin.file | False | The desktop info stamp names one machine's hostname and IP. Only a logged-in
+graphical session writes it, which a Packer build does not have, so it should
+never exist here -- removed anyway rather than resting on that reasoning: it
+lives under a home directory that IS in the image, and a wallpaper announcing
+the build VM's identity on every flashed laptop is exactly what sealing
+exists to prevent. The path is the renderer's cache directory in
+tasks/main.yml. |
+
 
 
 

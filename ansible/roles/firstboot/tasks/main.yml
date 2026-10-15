@@ -12,6 +12,14 @@
       - efibootmgr
     state: present
 
+# Where roles drop their own first-boot steps, from their tasks/seal.yml. Made
+# here, before roles/seal runs those, so every step has somewhere to land.
+- name: Create the first-boot steps directory
+  ansible.builtin.file:
+    path: "/usr/local/lib/workstation/firstboot.d"
+    state: directory
+    mode: "0755"
+
 - name: Install first-boot script
   ansible.builtin.template:
     src: firstboot.sh.j2
