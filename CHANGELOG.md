@@ -57,6 +57,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Changed
 
+- `make lint` runs exactly the checks CI runs, through the same targets, so a
+  clean local run predicts a green one: both playbook phases are
+  syntax-checked and Packer is fully validated, not only parsed.
 - Every pull request now checks that a converged machine matches what
   `group_vars` declares, not only that the playbook ran, and flipping a
   feature flag no longer breaks the next image build on a stale test.
@@ -93,6 +96,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   1Password's or Ubuntu's own `ubuntu.sources`. Before, it read only one-line
   `.list` entries, so a leftover `.list` line beside a vendor's `.sources`
   file went unreported even though apt refuses to read any of its sources.
+- `make lint-docs` no longer passes when docsible fails to regenerate the role
+  READMEs, and `make apply-check` now passes the same image version as
+  `make apply`.
 - `make verify-repos` now checks Nimbalyst's pinned AppImage, which it had
   never covered, and `--checksums` verifies its sha512 rather than assuming
   every pin is sha256.
