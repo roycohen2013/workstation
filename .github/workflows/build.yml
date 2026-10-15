@@ -34,6 +34,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fail in seconds rather than at the end. With the bucket secrets unset, a
+      # publish run used to build for ~40 minutes and then die on the first line
+      # of `make publish`. Checks presence only and never prints a value.
+      # R2_ENDPOINT_URL is not required: R2 needs it, AWS S3 must not have it.
+      - name: Check publish credentials
+        if: github.event_name == 'push' || inputs.publish
+        env:
+          WORKSTATION_BUCKET: ${{ secrets.WORKSTATION_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          missing=""
+          for name in WORKSTATION_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::publishing needs these repository secrets, which are unset:$missing (see docs/publishing.md)"
+            exit 1
+          fi
+          echo "publish credentials are set"
+
       - name: Check KVM is available
         run: |
           # GitHub's Linux runners expose /dev/kvm, but not to the runner user

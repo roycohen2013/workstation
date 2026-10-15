@@ -14,6 +14,28 @@ make publish     # upload + move the 'stable' channel
 make fetch       # on another machine
 ```
 
+## Publishing from CI
+
+`.github/workflows/build.yml` publishes on a `v*` tag, or when run by hand with
+**publish** ticked. It reads its credentials from repository secrets
+(*Settings → Secrets and variables → Actions*):
+
+| Secret | Value |
+|---|---|
+| `WORKSTATION_BUCKET` | `terraform output -raw bucket_name` |
+| `R2_ENDPOINT_URL` | `terraform output -raw s3_endpoint` |
+| `R2_ACCESS_KEY_ID` | the R2 API token's access key ID |
+| `R2_SECRET_ACCESS_KEY` | the R2 API token's secret access key |
+
+Terraform creates the bucket but not the key. Make one in the Cloudflare
+dashboard under *R2 → Manage R2 API Tokens*, with **Object Read & Write**
+permission scoped to this bucket only. The secret is shown once.
+
+The workflow checks the three required secrets before it starts building, so
+a publish run with any of them missing fails in seconds rather than after the
+build. For AWS S3 instead of R2, the secret names stay the same but
+`R2_ENDPOINT_URL` must not exist -- see [`aws-s3-setup.md`](aws-s3-setup.md).
+
 ## Channels and retention
 
 `WORKSTATION_CHANNEL` (default `stable`) names the pointer `make publish` moves
