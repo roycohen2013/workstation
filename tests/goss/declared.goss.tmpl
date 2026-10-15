@@ -46,6 +46,14 @@ file:
 {{- range .Vars.aliases }}
       - {{ printf "alias %s='%s'" .name .command | printf "%q" }}
 {{- end }}
+  # The configured user's login shell is zsh, which never reads .bashrc:
+  # without the block here the aliases above are invisible to them.
+  /etc/zsh/zshrc:
+    exists: true
+    contents:
+{{- range .Vars.aliases }}
+      - {{ printf "alias %s='%s'" .name .command | printf "%q" }}
+{{- end }}
 {{- end }}
 {{- range .Vars.keyrings }}
   # A keyring the repository's signed-by names. Missing, every apt update

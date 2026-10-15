@@ -60,10 +60,24 @@ nothing, which is the only correct behaviour here. |
 two. They are plain assignments that nothing unsets, so a later line wins if
 a future Ubuntu stops shipping the defaults. |
 | Set shell aliases in bashrc | ansible.builtin.blockinfile | False | One managed block rather than a line per alias: blockinfile owns the region
-between its markers, so an alias dropped from base_bash_aliases is gone from
+between its markers, so an alias dropped from base_shell_aliases is gone from
 the file on the next converge. Appending at EOF puts these below Ubuntu's
 `case $- in *i*) ;; *) return;; esac` guard, so they are defined for
 interactive shells only -- which is all an alias is ever useful in. |
+| Check for the system zshrc | ansible.builtin.stat | False | zsh reads none of the bash files, and not /etc/profile.d either outside a
+login shell -- which a GNOME Terminal tab is not. /etc/zsh/zshrc is Debian's
+system zshrc, sourced by every interactive zsh, so the same block there
+reaches the configured user, root and any user created later, without
+creating a ~/.zshrc: that file belongs to the user's dotfiles, and a block
+planted in it would fight chezmoi, which replaces the file wholesale. The
+system file runs before ~/.zshrc, so personal aliases still win.
+
+Like /etc/skel/.bashrc above, this is a dpkg conffile: if zsh-common ever
+ships a changed one, dpkg stops to ask instead of replacing it, and
+unattended-upgrades holds that package back until someone answers. Rare for
+this file, and the price of reaching every zsh without touching anyone's
+home directory. |
+| Set shell aliases in the system zshrc | ansible.builtin.blockinfile | True |  |
 | Install the fastfetch login banner | ansible.builtin.template | True | /etc/profile.d, following the pattern roles/dotfiles already uses for its own
 login hook: installed when enabled, removed when not, so switching the flag
 off actually takes the banner away instead of leaving a stale file behind. |

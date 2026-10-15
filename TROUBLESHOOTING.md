@@ -68,10 +68,19 @@ keyring lives -- and since Packer and Terraform are requirements of this
 project, HashiCorp's own instructions had usually already written
 `/etc/apt/sources.list.d/hashicorp.list` before `make apply` ever ran.
 
+It also happens across formats. Some vendors' packages (Chrome, 1Password)
+replace the one-line `<name>.list` this repo writes with their own deb822
+`<name>.sources` file, and Ubuntu 24.04+ ships its archive as `ubuntu.sources`.
+A `.list` line left beside a `.sources` stanza for the same origin, with a
+different key, conflicts just the same. A `.sources` stanza names its key in a
+`Signed-By:` field: either a path, or an inline key block that counts as a
+different value from any path.
+
 **Fix.** Already handled for HashiCorp: `group_vars` uses the vendor's
 documented `key_path`, so the two declarations are byte-identical and collapse
-into one. `make doctor` reports any origin with more than one `signed-by`. To
-clear one by hand:
+into one. `make doctor` reports any origin declared with more than one key,
+in either format, naming each key and the file it came from. To clear a
+duplicate `.list` line by hand:
 
 ```bash
 grep -rn signed-by /etc/apt/sources.list.d/<name>.list   # find the duplicate
@@ -79,8 +88,68 @@ sudo sed -i '\|signed-by=/wrong/path.gpg|d' /etc/apt/sources.list.d/<name>.list
 sudo apt-get update
 ```
 
+When the conflict is between a `.list` line and a vendor's `.sources` file,
+keep the `.sources` file and delete the `.list`. The vendor's package rewrites
+its `.sources` on every upgrade, so editing it doesn't stick:
+
+```bash
+grep -rni signed-by /etc/apt/sources.list.d/   # both formats
+sudo rm /etc/apt/sources.list.d/<name>.list
+sudo apt-get update
+```
+
+If the repo's entry in `group_vars` isn't marked `vendor_sources: true`, mark
+it. Then `make apply` removes the bootstrap `.list` itself once the vendor's
+`.sources` exists, instead of writing it back.
+
 When adding a repo, prefer the vendor's documented keyring path over this
 repo's default whenever their install instructions write a sources file too.
+
+---
+
+## `NO_PUBKEY <key id>` / `signatures couldn't be verified because the public key is not available`
+
+Only that repository fails; apt keeps its previous index and warns on every
+update.
+
+**Cause.** The vendor rotated its signing key. HashiCorp did on 2026-09-09
+(`NO_PUBKEY FC9CA96ACA026560`). Until 2026-10-15, `make apply` fetched the
+new key but never installed it once a keyring already existed, so it reported
+`ok` and left the old key in place.
+
+**Fix.** `make apply` -- it now installs whatever key the vendor currently
+serves. To fix one by hand without a converge, dearmour the vendor's key over
+the keyring the repository names (HashiCorp shown):
+
+```bash
+curl -fsSL https://apt.releases.hashicorp.com/gpg \
+  | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+sudo apt-get update
+```
+
+For another vendor, the URL and path are its entry's `key_url` and `key_path`
+in `group_vars` (default `/etc/apt/keyrings/<name>.gpg`). Entries marked
+`key_armoured` are copied as-is, not dearmoured.
+
+---
+
+## `Target Packages (...) is configured multiple times in .../<name>.list:1 and .../<name>.list:2`
+
+A warning per target on every `apt update`; nothing actually fails.
+
+**Cause.** One file holds two lines for the same repository that differ only
+in options -- typically the vendor's own line, written by its package or by
+hand from its install docs, and this repo's. `apt_repository` matches lines
+exactly, so a different `arch=` list or option order counts as a different
+repository and both stay. Claude Desktop did this: its package writes
+`arch=amd64,arm64`, and this repo used to write `arch=amd64`.
+
+**Fix.** For Claude Desktop, `make apply` -- the entry now declares the
+vendor's exact line and removes the one it used to add. For another vendor,
+set the entry's `repo` to the vendor's line exactly and list the old line
+under `repo_replaces`, so machines that already have it lose it. By hand:
+delete the extra line from the file named in the warning and run
+`sudo apt-get update`.
 
 ---
 

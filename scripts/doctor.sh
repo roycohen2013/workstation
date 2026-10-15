@@ -175,14 +175,89 @@ if command -v apt-get >/dev/null 2>&1; then
             "run \`apt-get indextargets\` to see the error. See TROUBLESHOOTING.md"
     fi
 
-    dupes="$(grep -rhoE '^deb .*' /etc/apt/sources.list.d/*.list /etc/apt/sources.list 2>/dev/null \
-        | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^https?:/) url = $i
-                 match($0, /signed-by=[^] ]*/)
-                 key = (RSTART ? substr($0, RSTART + 10, RLENGTH - 10) : "none")
-                 if (url) print url, key }' \
-        | sort -u | awk '{ seen[$1]++ } END { for (u in seen) if (seen[u] > 1) print u }')"
+    # Both source formats count: a vendor that owns its source as a deb822
+    # `.sources` file (Chrome, 1Password; Ubuntu's own ubuntu.sources) collides
+    # with a leftover one-line `.list` entry just as two `.list` entries do.
+    # One record per declared origin: origin, signed-by value, file. An inline
+    # Signed-By key block is a value of its own, distinct from every path and
+    # from every other key. DOCTOR_APT_DIR points this at a scratch tree.
+    apt_dir="${DOCTOR_APT_DIR:-/etc/apt}"
+    apt_files=()
+    for f in "$apt_dir/sources.list" "$apt_dir"/sources.list.d/*.list "$apt_dir"/sources.list.d/*.sources; do
+        [ -f "$f" ] && apt_files+=("$f")
+    done
+    dupes=""
+    if [ "${#apt_files[@]}" -gt 0 ]; then
+        dupes="$(awk '
+            function origin(u) { sub(/\/+$/, "", u); return u }
+            function trim(v) { gsub(/^[ \t]+|[ \t]+$/, "", v); gsub(/[ \t]+/, " ", v); return v }
+            function emit(u, k, f) { if (u ~ /^[a-z][a-z0-9+.-]*:\/\//) print origin(u) "\t" k "\t" f }
+            function flush(   n, i, list, key) {
+                if (stanza && enabled) {
+                    if (cont ~ /BEGINPGP/) key = "inline:" cont
+                    else key = trim(sb " " cont)
+                    if (key == "") key = "none"
+                    n = split(uris, list, /[ \t]+/)
+                    for (i = 1; i <= n; i++) emit(list[i], key, sfile)
+                }
+                stanza = 0; enabled = 1; uris = ""; sb = ""; cont = ""; field = ""
+            }
+            FNR == 1 { flush(); deb822 = (FILENAME ~ /\.sources$/) }
+
+            # One-line format: deb [opts] uri suite components...
+            !deb822 {
+                if ($0 !~ /^[ \t]*deb(-src)?[ \t]/) next
+                url = ""
+                for (i = 2; i <= NF && url == ""; i++) if ($i ~ /:\/\//) url = $i
+                match($0, /signed-by=[^] \t]*/)
+                emit(url, RSTART ? substr($0, RSTART + 10, RLENGTH - 10) : "none", FILENAME)
+                next
+            }
+
+            # deb822: blank-line-separated stanzas of Field: value, with
+            # indented continuation lines (" ." stands for an empty line).
+            /^#/ { next }
+            /^[ \t]*$/ { flush(); next }
+            /^[ \t]/ {
+                if (field == "signed-by") { v = $0; gsub(/[ \t]/, "", v); if (v != ".") cont = cont v }
+                else if (field == "uris") uris = uris " " $0
+                next
+            }
+            {
+                c = index($0, ":"); if (!c) next
+                # A stanza ending at EOF is flushed once the next file has
+                # started, so remember which file it came from.
+                if (!stanza) sfile = FILENAME
+                stanza = 1
+                field = tolower(trim(substr($0, 1, c - 1)))
+                v = trim(substr($0, c + 1))
+                if (field == "uris") uris = v
+                else if (field == "signed-by") sb = v
+                else if (field == "enabled") enabled = (tolower(v) !~ /^(no|false|off|without|disable|0)$/)
+            }
+            END { flush() }
+        ' "${apt_files[@]}" \
+            | sort -u \
+            | awk -F '\t' -v dir="$apt_dir/" '
+                function label(k,   e) {
+                    if (k !~ /^inline:/) return k
+                    e = index(k, "-----END"); if (!e) e = length(k) + 1
+                    return "inline key ..." substr(k, e > 9 ? e - 8 : 8, 8)
+                }
+                {
+                    f = $3; if (index(f, dir) == 1) f = substr(f, length(dir) + 1)
+                    if (!(($1, $2) in pair)) { pair[$1, $2] = 1; keys[$1]++ }
+                    decl[$1] = decl[$1] (decl[$1] == "" ? "" : ", ") label($2) " (" f ")"
+                }
+                END {
+                    for (u in keys) if (keys[u] > 1) {
+                        out = out (out == "" ? "" : "\n        ") u ": " decl[u]
+                    }
+                    print out
+                }')"
+    fi
     if [ -n "$dupes" ]; then
-        fail "an origin is declared with more than one signed-by path:" "$dupes"
+        fail "an origin is declared with more than one signed-by value:" "$dupes"
     else
         ok "no conflicting signed-by declarations"
     fi

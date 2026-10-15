@@ -93,7 +93,7 @@
         fastfetch_banner: "{{ base_fastfetch_on_login | bool }}"
       dconf: "{{ desktop_dconf if workstation_desktop_enabled | bool else [] }}"
       sysctl: "{{ base_sysctl | dict2items }}"
-      aliases: "{{ base_bash_aliases }}"
+      aliases: "{{ base_shell_aliases }}"
       keyrings: "{{ manifest_repo_keyrings | default([]) | sort }}"
       # Repositories whose vendor's .sources file replaces ours after install:
       # exactly one declaration of each must remain. See roles/apt_repos.
