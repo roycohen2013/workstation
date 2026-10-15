@@ -39,7 +39,9 @@ apt's own retry is what makes every later fetch survive a blip, rather than
 each Ansible task having to grow its own retry loop. |
 | Install base packages | ansible.builtin.apt | False |  |
 | Remove unwanted packages | ansible.builtin.apt | True |  |
-| Upgrade all packages | ansible.builtin.apt | False |  |
+| Upgrade all packages | ansible.builtin.apt | False | No autoclean here: the apt module ends the task after the upgrade, so it
+never ran. The cache is cleared by apt's periodic autoclean on a running
+machine (AutocleanInterval, security role) and by roles/seal in the image. |
 | Ensure login shell is installed | ansible.builtin.apt | True | --- Account ------------------------------------------------------------------ |
 | Create the workstation user | ansible.builtin.user | False |  |
 | Set the colour prompt in bashrc | ansible.builtin.lineinfile | False | --- Interactive shell defaults -----------------------------------------------

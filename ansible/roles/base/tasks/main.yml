@@ -43,11 +43,13 @@
     purge: true
   when: apps_apt_absent | length > 0
 
+# No autoclean here: the apt module ends the task after the upgrade, so it
+# never ran. The cache is cleared by apt's periodic autoclean on a running
+# machine (AutocleanInterval, security role) and by roles/seal in the image.
 - name: Upgrade all packages
   ansible.builtin.apt:
     upgrade: dist
     autoremove: true
-    autoclean: true
 
 # --- Account ------------------------------------------------------------------
 - name: Ensure login shell is installed
