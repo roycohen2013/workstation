@@ -135,3 +135,6 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   multiple times". On a machine where `claude-desktop.list` already held the
   vendor's line, `make apply` appended its own slightly different one; it now
   declares the vendor's exact line and removes the one it used to add.
+- Images no longer ship packages that nothing depends on. The final
+  clean-up step asked apt to autoclean and autoremove in one task, and the
+  Ansible module only ever does the first, so the autoremove never ran.

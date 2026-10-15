@@ -33,7 +33,11 @@ Description: Strips machine identity and build residue so the artifact is a clea
 | Confirm this is a build image | ansible.builtin.stat | False |  |
 | Refuse to seal anything that is not a build image | ansible.builtin.assert | False |  |
 | Record image metadata | ansible.builtin.copy | False |  |
-| Clean apt caches | ansible.builtin.apt | False | --- Package caches ----------------------------------------------------------- |
+| Remove packages nothing depends on | ansible.builtin.apt | False | --- Package caches -----------------------------------------------------------
+autoremove only. The apt module runs one cleanup per task and then exits, so
+this used to say `autoclean: true` as well and never autoremoved anything:
+packages orphaned after base's upgrade shipped in every image. autoclean is
+not needed -- the task below deletes the downloaded .debs outright. |
 | Remove apt lists | ansible.builtin.shell | False |  |
 | Blank machine-id | ansible.builtin.copy | False | --- Machine identity ---------------------------------------------------------
 Every machine written from this image must generate its own. Sharing a

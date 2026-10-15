@@ -29,9 +29,12 @@
     mode: "0644"
 
 # --- Package caches -----------------------------------------------------------
-- name: Clean apt caches
+# autoremove only. The apt module runs one cleanup per task and then exits, so
+# this used to say `autoclean: true` as well and never autoremoved anything:
+# packages orphaned after base's upgrade shipped in every image. autoclean is
+# not needed -- the task below deletes the downloaded .debs outright.
+- name: Remove packages nothing depends on
   ansible.builtin.apt:
-    autoclean: true
     autoremove: true
 
 - name: Remove apt lists
