@@ -46,11 +46,61 @@
   loop_control:
     label: "{{ item.name }}"
 
-# Each list mirrors the gate its installing role applies: desktop packages only
-# with the desktop, flatpaks only where roles/apps installs them.
+# The keyring path defaults per entry (key_path, else /etc/apt/keyrings/<name>.gpg),
+# which map() cannot express, so it is resolved here the way roles/apt_repos
+# resolves it.
+- name: Collect the keyrings and debsig policies the enabled repositories install
+  ansible.builtin.set_fact:
+    manifest_repo_keyrings: >-
+      {{ manifest_repo_keyrings | default([])
+         + [item.key_path | default('/etc/apt/keyrings/' ~ item.name ~ '.gpg')] }}
+    manifest_repo_debsig: >-
+      {{ manifest_repo_debsig | default([])
+         + ([{'name': item.name, 'key_id': item.debsig_key_id}]
+            if item.debsig_key_id is defined else []) }}
+  loop: "{{ apt_repos_enabled | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Each entry mirrors the gate its producing role applies -- desktop packages and
+# dconf keys only with the desktop, flatpaks only where roles/apps installs them
+# -- so the record states what this machine should have, already resolved.
+# tests/goss turns it into checks without re-deriving any of it: the templates
+# there only switch on `features` and loop over lists.
 - name: Assemble the declared set
   ansible.builtin.set_fact:
     manifest_declared:
+      schema: 2
+      user: "{{ workstation_user }}"
+      # A minimum: base adds groups with append and never removes one, so a
+      # lived-in machine legitimately carries others.
+      user_groups: >-
+        {{ (workstation_user_groups
+            + (['docker'] if workstation_docker_enabled | bool else [])
+            + (['wireshark'] if workstation_desktop_enabled | bool
+                and desktop_wireshark_capture_as_user | bool else [])
+            + (['kvm'] if workstation_claude_desktop_enabled | bool else [])
+           ) | unique | sort }}
+      features:
+        desktop: "{{ workstation_desktop_enabled | bool }}"
+        docker: "{{ workstation_docker_enabled | bool }}"
+        claude_desktop: "{{ workstation_claude_desktop_enabled | bool }}"
+        balena_etcher: >-
+          {{ workstation_balena_etcher_enabled | bool and workstation_desktop_enabled | bool }}
+        wireshark_capture: >-
+          {{ workstation_desktop_enabled | bool and desktop_wireshark_capture_as_user | bool }}
+        ssh_server: "{{ workstation_ssh_server_enabled | bool }}"
+        fastfetch_banner: "{{ base_fastfetch_on_login | bool }}"
+      dconf: "{{ desktop_dconf if workstation_desktop_enabled | bool else [] }}"
+      sysctl: "{{ base_sysctl | dict2items }}"
+      aliases: "{{ base_bash_aliases }}"
+      keyrings: "{{ manifest_repo_keyrings | default([]) | sort }}"
+      # Repositories whose vendor's .sources file replaces ours after install:
+      # exactly one declaration of each must remain. See roles/apt_repos.
+      vendor_sources: >-
+        {{ apt_repos_enabled | default([]) | selectattr('vendor_sources', 'defined')
+           | selectattr('vendor_sources') | map(attribute='name') | sort }}
+      debsig: "{{ manifest_repo_debsig | default([]) }}"
       apt: >-
         {{ (apps_apt_base
             + apps_apt_dev

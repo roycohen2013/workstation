@@ -163,6 +163,18 @@ jobs:
             grep -E '^changed: ' clean.log || true
           fi
 
+      # Converging without error proves the playbook ran, not that the machine
+      # ended up as group_vars declares. The shared goss suite asserts that,
+      # from the declared set roles/manifest just recorded -- the same suite
+      # the image build runs, so a regression check written for a live-phase
+      # bug runs here on every pull request instead of only in a 30-60 minute
+      # image build. A failure fails the job: unlike a second-run change
+      # (reported as a warning above), a failed assertion is never expected.
+      # See docs/adr/0004.
+      - name: Verify the converged state
+        if: steps.scope.outputs.needed == 'true'
+        run: sudo tests/goss/run-goss.sh tests/goss/shared.yaml
+
       - name: Upload the second run log
         if: always() && steps.scope.outputs.needed == 'true'
         uses: actions/upload-artifact@v4

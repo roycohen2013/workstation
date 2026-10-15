@@ -14,5 +14,5 @@ the binary, and your repo is pulled on first login. Set `dotfiles_repo` in
 
 The build account (`packer`/`packer`, hash committed in
 `packer/http/user-data`) exists only inside the build VM and is deleted by
-`roles/seal` before export. `tests/goss/workstation.yaml` asserts the machine
+`roles/seal` before export. `tests/goss/image.yaml` asserts the machine
 identity is blank in the finished artifact.

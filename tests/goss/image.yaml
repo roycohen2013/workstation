@@ -1,0 +1,80 @@
+---
+# Assertions run inside the image at the end of the Packer build, after the
+# seal role. A failure here fails the build, so a broken image is never
+# exported, checksummed or published.
+#
+# Everything in shared.yaml, plus what only holds for a sealed image: the
+# firstboot hook armed, and nothing machine-specific or build-specific left
+# behind -- build credentials, machine identity, anything that makes a shared
+# artifact unsafe or makes every machine built from it identical. A flashed
+# machine has run firstboot and a converged one never ran seal, so none of
+# this can hold there.
+gossfile:
+  shared.yaml: {}
+
+package:
+  # Installed by roles/firstboot, which only runs in the image phase. Needed by
+  # firstboot to resize the root partition on the target disk, and by the
+  # bootloader on bare metal.
+  cloud-guest-utils: { installed: true }
+  gdisk:             { installed: true }
+  grub-efi-amd64:    { installed: true }
+
+file:
+  # --- The image is adaptable ------------------------------------------------
+  /usr/local/sbin/workstation-firstboot:
+    exists: true
+    mode: "0755"
+  /var/lib/workstation/firstboot-pending:
+    exists: true   # firstboot is armed; without this the image never adapts
+  /etc/workstation-release:
+    exists: true
+    contents:
+      - /^WORKSTATION_VERSION=/
+      - /^WORKSTATION_BUILD_DATE=/
+
+  # --- Machine identity is blank --------------------------------------------
+  # Non-empty here means every machine from this image shares an identity.
+  /etc/machine-id:
+    exists: true
+    size: 0
+  /var/lib/dbus/machine-id:
+    exists: true
+    size: 0
+
+  # --- cloud-init is out of the way -----------------------------------------
+  /etc/cloud/cloud-init.disabled:
+    exists: true
+
+  # --- Build residue is gone -------------------------------------------------
+  /etc/workstation-build-image:
+    exists: false
+  # Nothing personal may be baked into a redistributable artifact.
+  /root/.ssh/id_rsa:      { exists: false }
+  /root/.ssh/id_ed25519:  { exists: false }
+
+command:
+  # SSH host keys must be absent so each machine generates its own; shared host
+  # keys across machines defeat host verification entirely.
+  no-ssh-host-keys:
+    exec: "ls /etc/ssh/ssh_host_* 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]
+
+  # apt lists removed by the seal role.
+  apt-lists-cleared:
+    exec: "find /var/lib/apt/lists -type f -name '*Packages*' 2>/dev/null | wc -l"
+    exit-status: 0
+    stdout: ["0"]
+
+  # Power management stays off in the artifact; firstboot turns it on only if
+  # it finds real hardware. On a converged machine it depends on whether that
+  # hardware is virtual, so this is not a shared check.
+  tlp-disabled-in-image:
+    exec: "systemctl is-enabled tlp || true"
+    exit-status: 0
+    stdout: ["disabled"]
+
+service:
+  workstation-firstboot:
+    enabled: true

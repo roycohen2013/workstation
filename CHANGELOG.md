@@ -17,6 +17,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Added
 
+- `make verify` checks the machine you are on against what it was last
+  converged to: every declared package, flatpak, dconf setting, sysctl value,
+  alias, group and apt keyring. Run it after `make apply`.
 - Claude Desktop, Claude Code and Nimbalyst, from their vendors' signed apt
   repositories.
 - Google Chrome, installed from Google's apt repository.
@@ -54,6 +57,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Changed
 
+- Every pull request now checks that a converged machine matches what
+  `group_vars` declares, not only that the playbook ran, and flipping a
+  feature flag no longer breaks the next image build on a stale test.
 - The image build now fails when a declared flatpak or snap is missing, not
   only an apt package, and its image tests check every declared package
   rather than a hand-picked sample.

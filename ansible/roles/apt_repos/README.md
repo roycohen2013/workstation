@@ -129,11 +129,9 @@ policy has to be in place before the package installs, not after.
 
 If debsig_key_id is wrong, these files land in a directory dpkg never
 consults and the policy is silently inert. apt install still succeeds, which
-is why goss asserts the paths and `make verify-repos` checks the id against
-the published key, rather than trusting either. |
-| Create the debsig record directory | ansible.builtin.file | True |  |
-| Record the debsig key id used | ansible.builtin.copy | False | Recorded so the image test asserts against the id actually used, rather than
-duplicating the constant into the test suite where the two could drift. |
+is why goss asserts the paths (from the declared set roles/manifest records)
+and `make verify-repos` checks the id against the published key, rather than
+trusting either. |
 | Install debsig policies | ansible.builtin.get_url | False |  |
 | Install debsig keyrings | ansible.builtin.command | False | The repository's own signing key, from the cache filled above. |
 | Install packages from third-party repositories | ansible.builtin.apt | True | latest, not present: base upgrades everything before these repositories

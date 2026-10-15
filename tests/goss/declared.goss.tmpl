@@ -1,35 +1,111 @@
 {{- /*
   Assertions generated from /etc/workstation-declared.json, the declared set
-  roles/manifest assembled from group_vars and checked against the inventory.
+  roles/manifest assembled from group_vars and recorded on the machine.
   run-goss.sh passes that file as --vars; without it this template fails to
   render, which fails the run rather than silently asserting nothing.
 
+  Every list in the record is already resolved for this machine's flags, so
+  this template only loops: whatever is listed must hold.
+
   Not a .yaml file on purpose: it is a Go template, and yamllint would reject
-  the template syntax.
+  the template syntax. Strings are emitted with printf "%q", which produces a
+  double-quoted string YAML reads back unchanged.
 
-  Runs after roles/seal, so it also catches anything seal's autoremove took
-  that the manifest check, which runs before seal, could not see.
-
-  A declared name must be a real package here, not a virtual one: goss asks
-  dpkg about the name itself, where roles/manifest also accepts a name that
-  an installed package Provides.
+  A declared package name must be a real package here, not a virtual one:
+  goss asks dpkg about the name itself, where roles/manifest also accepts a
+  name that an installed package Provides.
 */ -}}
 package:
 {{- range .Vars.apt }}
-  {{ . }}: { installed: true }
+  {{ printf "%q" . }}: { installed: true }
 {{- end }}
 {{- range .Vars.absent }}
-  {{ . }}: { installed: false }
+  {{ printf "%q" . }}: { installed: false }
+{{- end }}
+
+file:
+  # Written as one file by roles/base; it decides each value at boot.
+  /etc/sysctl.d/99-workstation.conf:
+    exists: true
+    contents:
+{{- range .Vars.sysctl }}
+      - {{ printf "/^%s *= *%v$/" .key .value | printf "%q" }}
+{{- end }}
+{{- if .Vars.aliases }}
+  # skel is what users created after imaging inherit; the user's own .bashrc
+  # was populated from skel before the alias block existed.
+  /etc/skel/.bashrc:
+    exists: true
+    contents:
+{{- range .Vars.aliases }}
+      - {{ printf "alias %s='%s'" .name .command | printf "%q" }}
+{{- end }}
+  {{ printf "/home/%s/.bashrc" .Vars.user | printf "%q" }}:
+    exists: true
+    contents:
+{{- range .Vars.aliases }}
+      - {{ printf "alias %s='%s'" .name .command | printf "%q" }}
+{{- end }}
+{{- end }}
+{{- range .Vars.keyrings }}
+  # A keyring the repository's signed-by names. Missing, every apt update
+  # fails with NO_PUBKEY.
+  {{ printf "%q" . }}:
+    exists: true
+    size:
+      gt: 0
+{{- end }}
+{{- range .Vars.debsig }}
+  # Silently inert if it lands in the wrong key-id directory, and apt install
+  # succeeds either way -- so both files are asserted under the declared id.
+  {{ printf "/etc/debsig/policies/%s/%s.pol" .key_id .name | printf "%q" }}:
+    exists: true
+  {{ printf "/usr/share/debsig/keyrings/%s/debsig.gpg" .key_id | printf "%q" }}:
+    exists: true
 {{- end }}
 
 command:
 {{- range .Vars.flatpak }}
-  flatpak-{{ . }}:
-    exec: "flatpak info --system {{ . }}"
+  {{ printf "flatpak-%s" . | printf "%q" }}:
+    exec: {{ printf "flatpak info --system %s" . | printf "%q" }}
     exit-status: 0
 {{- end }}
 {{- range .Vars.snap }}
-  snap-{{ . }}:
-    exec: "snap list {{ . }}"
+  {{ printf "snap-%s" . | printf "%q" }}:
+    exec: {{ printf "snap list %s" . | printf "%q" }}
     exit-status: 0
+{{- end }}
+{{- range .Vars.dconf }}
+  # The compiled database, not the keyfile: a keyfile that was never compiled
+  # with `dconf update` sets nothing, which is how #4 shipped. -d reads the
+  # system default only, so root's own settings cannot mask it; stderr is
+  # ignored because dconf warns about XDG_RUNTIME_DIR without a session.
+  {{ printf "dconf-%s" .key | printf "%q" }}:
+    exec: {{ printf "dconf read -d %s 2>/dev/null" .key | printf "%q" }}
+    exit-status: 0
+    # equal, not a pattern: an exact match needs no escaping of GVariant
+    # syntax, and a substring match would let 4 pass for 14.
+    stdout:
+      equal: {{ printf "%v\n" .value | printf "%q" }}
+{{- end }}
+{{- range .Vars.vendor_sources }}
+  # Exactly one apt declaration of this origin: the vendor's deb822 file.
+  # Its postinst writes it and disables our bootstrap .list, which
+  # roles/apt_repos then removes. A .list back on disk means the two are
+  # fighting again and every `make apply` reports a change.
+  {{ printf "%s-single-apt-source" . | printf "%q" }}:
+    exec: {{ printf "test -s /etc/apt/sources.list.d/%s.sources && test ! -e /etc/apt/sources.list.d/%s.list && echo single" . . | printf "%q" }}
+    exit-status: 0
+    stdout: ["single"]
+{{- end }}
+
+user:
+  {{ printf "%q" .Vars.user }}:
+    exists: true
+{{- if .Vars.user_groups }}
+    groups:
+      contain-elements:
+{{- range .Vars.user_groups }}
+        - {{ printf "%q" . }}
+{{- end }}
 {{- end }}

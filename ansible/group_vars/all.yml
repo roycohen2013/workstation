@@ -266,6 +266,13 @@ apps_apt_absent:
   # compositor-agnostic. Declared absent rather than merely dropped from
   # apps_apt_base, or machines already converged would keep it forever.
   - conky-all
+  # LibreOffice Base and Math are deliberately not installed: they pull a Java
+  # runtime for the report builder -- a couple of hundred megabytes for
+  # features that go unopened. apps_apt_desktop names the four applications
+  # wanted rather than the libreoffice metapackage; declaring Base absent makes
+  # that a checked decision rather than a silent size regression waiting for
+  # someone to switch to the metapackage.
+  - libreoffice-base
 
 # --- APT: third-party repositories -------------------------------------------
 # Each entry adds a signed keyring and a sources.list.d entry, then installs its
