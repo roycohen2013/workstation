@@ -26,6 +26,14 @@ locals {
   artifact_name = "${var.image_name}-${var.version}"
   build_date    = formatdate("YYYY-MM-DD'T'hh:mm:ssZ", timestamp())
 
+  # The goss pin, read from versions.env so the image test, apply.yml and
+  # `make verify` all run the same verified binary. run-goss.sh reads the file
+  # itself in a checkout, but inside the VM it runs from a temporary path with
+  # no repo around it, so the values are passed in its environment.
+  versions_env = file("${abspath(path.root)}/../versions.env")
+  goss_version = regex("(?m)^GOSS_VERSION=(\\S+)", local.versions_env)[0]
+  goss_sha256  = regex("(?m)^GOSS_SHA256=(\\S+)", local.versions_env)[0]
+
   # Derived from ubuntu_release so the release is written down once. A
   # variable default cannot reference another variable, which is why these
   # are locals and why the corresponding variables default to empty rather
@@ -168,13 +176,23 @@ build {
 
   # Assert the image is what we think it is, from inside it. This runs after
   # the seal role, so it also verifies the sealing itself -- blanked
-  # machine-id, no host keys, firstboot armed.
+  # machine-id, no host keys, firstboot armed. image.yaml includes the shared
+  # suite apply.yml and `make verify` run, so an image is never checked less
+  # than a converged machine.
   provisioner "shell" {
     script          = "${path.root}/../tests/goss/run-goss.sh"
-    execute_command = "chmod +x {{ .Path }}; sudo -E {{ .Vars }} {{ .Path }}"
+    execute_command = "chmod +x {{ .Path }}; sudo -E {{ .Vars }} {{ .Path }} /tmp/goss/image.yaml"
     environment_vars = [
-      "GOSS_FILE=/tmp/goss/workstation.yaml",
+      "GOSS_VERSION=${local.goss_version}",
+      "GOSS_SHA256=${local.goss_sha256}",
     ]
+  }
+
+  # The suite itself is test tooling and must not ship. run-goss.sh removes
+  # the goss binary it downloaded; the uploaded suite goes here. A failed run
+  # never reaches this, but a failed run is never exported either.
+  provisioner "shell" {
+    inline = ["sudo rm -rf /tmp/goss"]
   }
 
   # Export raw alongside qcow2 and record checksums.

@@ -1,0 +1,43 @@
+---
+# Assertions that hold on any machine this repo has converged, in either phase:
+# the built image, a machine after `make apply`, and the GitHub runner after
+# apply.yml's converge. image.yaml includes this file and adds what only holds
+# for a sealed image.
+#
+# Run with tests/goss/run-goss.sh, which feeds goss the declared set
+# roles/manifest recorded in /etc/workstation-declared.json. Nothing here is
+# skipped by phase or by machine: a check that cannot hold everywhere belongs
+# in image.yaml instead (see docs/adr/0004).
+#
+# Most checks are generated from that record, so flipping a flag or editing a
+# list in group_vars changes what is checked without anyone editing goss:
+#   declared.goss.tmpl  one assertion per declared item -- packages, dconf
+#                       keys, sysctl, aliases, groups, keyrings, sources
+#   features.goss.tmpl  hand-written checks of behaviour that a feature flag
+#                       switches on, each guarded by that flag
+# What remains below holds whatever group_vars says.
+gossfile:
+  declared.goss.tmpl: {}
+  features.goss.tmpl: {}
+
+file:
+  # The one line that decides whether a flashed image finds its root disk on
+  # unfamiliar hardware.
+  /etc/initramfs-tools/initramfs.conf:
+    exists: true
+    contents:
+      - "MODULES=most"
+
+command:
+  # Sanity check that GRUB will actually be regenerated correctly.
+  grub-config-present:
+    exec: "test -f /boot/grub/grub.cfg && echo present"
+    exit-status: 0
+    stdout: ["present"]
+
+  # VS Code must come from apt only. A leftover snap would put a second copy on
+  # the machine with its own updater, and nothing else here would notice.
+  vscode-not-also-a-snap:
+    exec: "snap list code >/dev/null 2>&1 && echo duplicate || echo single"
+    exit-status: 0
+    stdout: ["single"]

@@ -36,12 +36,24 @@ Description: Records what was actually installed and fails the build on drift fr
 | Parse the manifest | ansible.builtin.set_fact | False |  |
 | Collect the packages pinned downloads install | ansible.builtin.set_fact | False | A pinned download of kind deb is an apt package once installed, so it is
 declared like one -- under its package name, which may differ from its name. |
-| Assemble the declared set | ansible.builtin.set_fact | False | Each list mirrors the gate its installing role applies: desktop packages only
-with the desktop, flatpaks only where roles/apps installs them. |
-| Identify declared packages missing from the image | ansible.builtin.set_fact | False | Compared against satisfied_names rather than real package names alone: a
-declaration may legitimately name a virtual package, and comparing only
-against installed package names would report it missing while it is plainly
-there. See the Provides handling in capture-manifest.py. |
+| Collect the keyrings and debsig policies the enabled repositories install | ansible.builtin.set_fact | False | The keyring path defaults per entry (key_path, else /etc/apt/keyrings/<name>.gpg),
+which map() cannot express, so it is resolved here the way roles/apt_repos
+resolves it. |
+| Assemble the declared set | ansible.builtin.set_fact | False | Each entry mirrors the gate its producing role applies -- desktop packages and
+dconf keys only with the desktop, flatpaks only where roles/apps installs them
+-- so the record states what this machine should have, already resolved.
+tests/goss turns it into checks without re-deriving any of it: the templates
+there only switch on `features` and loop over lists. |
+| Identify declared packages missing from the image | ansible.builtin.set_fact | False | Compared against satisfied_names rather than real package names alone, so a
+declared name that only another package Provides is not misreported as
+missing -- it is reported below as what it is instead. See the Provides
+handling in capture-manifest.py. |
+| Identify declared packages that only another package provides | ansible.builtin.set_fact | False | A declared name must be a real package. One that only exists because another
+package Provides it -- a transitional name a release dropped, as p7zip-full
+and dnsutils were in 26.04 -- still installs, since apt resolves it, but
+nothing that asks dpkg about the name itself can see it: the image tests in
+tests/goss fail on it, after a converge that reported success. Failing here
+names the package to declare instead. |
 | Identify packages that were declared for removal but are still present | ansible.builtin.set_fact | False |  |
 | Fail the build when a declared package is not installed | ansible.builtin.assert | False |  |
 | Record the declared set alongside the manifest | ansible.builtin.copy | False | Written separately rather than merged into the manifest so the capture script
