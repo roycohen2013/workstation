@@ -110,6 +110,10 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   channel would stop resolving. Every channel's current image is now kept
   however old it is, and a publish that cannot read the channel pointers prunes
   nothing rather than guess.
+- Editors and bundlers keep their raised file-watcher limit after a localsearch
+  update. localsearch re-applied its own setting on every upgrade, dropping
+  `fs.inotify.max_user_watches` from 524288 to 65536 until the next reboot,
+  which is when "System limit for number of file watchers reached" appeared.
 - The image build produces its artifacts again. Its post-processor ran under
   dash, which has no `pipefail`, so it aborted on its own first line before
   converting, compressing, rendering docs or writing checksums -- leaving an
