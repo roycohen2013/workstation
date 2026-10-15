@@ -207,7 +207,7 @@ wanted -- the same trust model group_vars already uses for dev_mise_runtimes.
 
 ### `balena_etcher_version`
 
-`"2.1.6"`
+`"2.1.7"`
 
 ### `balena_etcher_release_base`
 
@@ -219,7 +219,7 @@ _(list or block — see the file)_
 
 ### `balena_etcher_deb_sha256`
 
-`2bdebb46c9f750a9abf11c188ff69a405b4a4fed114333d634c3b3fe59a64057`
+`9dbea6165ddee1ec1f1b7a38fe92f0d2c54c6217710438a7af6752c267d19395`
 
 From the release's combined SHA256SUMS.Linux.x64.txt. A mismatch fails the
 download task outright, so an interrupted or tampered fetch stops the build
