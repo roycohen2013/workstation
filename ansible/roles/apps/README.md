@@ -72,20 +72,18 @@ claude-desktop:   armoured, vendor path
 hashicorp:        dearmoured, vendor path -- see the note in group_vars |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
-| Check whether 1Password now manages its own apt source | ansible.builtin.stat | False | 1Password's postinst writes its own deb822 source at
-/etc/apt/sources.list.d/1password.sources -- keyring, debsig policy and
-debsig keyring too -- and then does:
+| Check which vendors already manage their own apt source | ansible.builtin.stat | False | Some vendors' postinst replaces the source this role declares with its own
+deb822 file, /etc/apt/sources.list.d/<name>.sources, and then disables ours:
+1Password comments out our .list, Chrome deletes it. Either way, re-adding
+ours on the next converge only restarts the fight, and CI's idempotence pass
+reported "Add repositories" changed on every run because of it.
 
-sed -i 's/^deb /# deb /' /etc/apt/sources.list.d/1password.list
-
-which comments out the file apt_repository manages here. Our next converge
-uncomments it, their next package operation comments it again, and the CI
-idempotence pass reported "Add repositories" changed forever because of it.
-
-Our entry is only needed to bootstrap: once their .sources exists, it is
-authoritative and ours is redundant. So stop declaring it, and remove the
-commented-out leftover so exactly one declaration of the origin remains --
-after the package installs, below, not here. |
+Our entry is only needed to bootstrap: once the vendor's .sources exists it
+is authoritative and ours is redundant. So entries marked vendor_sources in
+group_vars stop being declared here once that file exists, and our leftover
+.list is removed after the packages install, below -- leaving exactly one
+declaration of each origin. |
+| Note which vendors own their apt source | ansible.builtin.set_fact | False |  |
 | Add repositories | ansible.builtin.apt_repository | True |  |
 | Create 1Password debsig directories | ansible.builtin.file | True | 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 addition to apt verifying the repository -- so it has to be in place before
@@ -98,21 +96,16 @@ succeeds, which is why goss asserts the paths rather than trusting them. |
 duplicating the constant into the test suite where the two could drift. |
 | Install 1Password debsig policy | ansible.builtin.get_url | True |  |
 | Install 1Password debsig keyring | ansible.builtin.command | True |  |
-| Stop Google Chrome managing its own apt source | ansible.builtin.copy | True | Chrome re-adds its own apt source and keyring -- from postinst and from a
-daily cron job -- writing the same sources.list.d filename this role manages.
-If its version wins and names a keyring we never created, every later apt
-update fails with NO_PUBKEY. Chrome reads this file to decide whether to do
-that, so it has to exist BEFORE the package installs. |
 | Install packages from third-party repositories | ansible.builtin.apt | True |  |
-| Check again whether 1Password now manages its own apt source | ansible.builtin.stat | False | Checked again now, not reused from the check above. On a first converge --
-every image build, and every CI runner -- that check ran before 1Password
-was installed, so it was false: our .list was written to bootstrap, then the
-postinst wrote .sources and commented ours out. Reusing that stale answer
-skipped the cleanup, shipped the dead .list in every image, and left it for
-the second converge to delete, which made CI's idempotence pass report a
-change on every run. If a future postinst ever stops writing .sources, this
-stays false and our .list is kept: apt still has a working source. |
-| Remove our redundant 1Password apt source | ansible.builtin.file | True |  |
+| Check again which vendors now manage their own apt source | ansible.builtin.stat | False | Checked again now, not reused from the check above. On a first converge --
+every image build, and every CI runner -- that check ran before the vendor's
+package was installed, so it was false: our .list was written to bootstrap,
+then the postinst wrote .sources. Reusing that stale answer skipped the
+cleanup, shipped the dead .list in every image, and left it for the second
+converge to delete, which made CI's idempotence pass report a change on
+every run. If a future postinst ever stops writing .sources, this stays
+false and our .list is kept: apt still has a working source. |
+| Remove our bootstrap apt source where the vendor's has replaced it | ansible.builtin.file | False |  |
 | Add the workstation user to the kvm group for Cowork | ansible.builtin.user | True | Claude Desktop's Cowork tab runs agentic work in a QEMU/KVM virtual machine.
 It needs /dev/kvm and /dev/vhost-vsock, and only kvm group members can open
 the latter -- so joining the group is required even where /dev/kvm alone is

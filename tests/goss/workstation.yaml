@@ -162,13 +162,17 @@ command:
     exit-status: 0
     stdout: ["present"]
 
-  # Chrome re-adds its own apt source unless told not to. If this file is
-  # missing or wrong, the image ships an apt config that rewrites itself on
-  # first update -- so assert the guard, not just the package.
-  chrome-not-self-managing-apt:
-    exec: "grep -q 'repo_add_once=\"false\"' /etc/default/google-chrome && echo guarded"
+  # Exactly one apt declaration of the Chrome origin: the vendor's deb822 file.
+  # Chrome's postinst writes it and deletes our bootstrap .list itself; the
+  # role then stops re-adding ours. A .list back on disk means the two are
+  # fighting again and every `make apply` reports a change.
+  chrome-single-apt-source:
+    exec: |
+      test -s /etc/apt/sources.list.d/google-chrome.sources \
+        && test ! -e /etc/apt/sources.list.d/google-chrome.list \
+        && echo single
     exit-status: 0
-    stdout: ["guarded"]
+    stdout: ["single"]
 
   # 1Password's keyring must be at the vendor's documented path, not ours.
   1password-keyring-at-vendor-path:
