@@ -208,6 +208,21 @@ or turn the setting off at <https://github.com/settings/emails>.
 
 ---
 
+## `publishing needs these repository secrets, which are unset`
+
+Also seen, from before the build workflow checked up front, as
+`WORKSTATION_BUCKET: set WORKSTATION_BUCKET` at the very end of a build.
+
+**Cause.** A build was asked to publish -- a `v*` tag, or **publish** ticked on
+a manual run -- and the bucket secrets are not set on the repository. The
+error names the missing ones.
+
+**Fix.** Create the bucket and an access key, and add the secrets:
+[`docs/publishing.md`](docs/publishing.md#publishing-from-ci). Until then, run
+builds with **publish** unticked; they still produce and test the image.
+
+---
+
 ## Something else
 
 1. `make doctor` -- environment drift is the most likely cause.
