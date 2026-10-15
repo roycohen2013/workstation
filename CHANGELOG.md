@@ -74,6 +74,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Fixed
 
+- BalenaEtcher runs the new release after its pinned version is bumped. Before,
+  `make apply` left the previous release's binary behind its `--no-sandbox`
+  wrapper and overwrote the new one, so the upgrade never took effect.
 - `make apply` no longer times out on Ubuntu 26.04, whose `sudo-rs` does not present
   the password prompt Ansible's become plugin expects.
 - `make apply` no longer fails on a machine with no SSH server installed, or with
