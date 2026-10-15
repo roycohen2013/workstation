@@ -93,6 +93,8 @@ group_vars stop being declared here once that file exists, and our leftover
 .list is removed after the packages install, below -- leaving exactly one
 declaration of each origin. |
 | Note which vendors own their apt source | ansible.builtin.set_fact | False |  |
+| Remove repository lines an entry no longer declares | ansible.builtin.apt_repository | False | Before adding: apt_repository matches lines exactly, so a changed `repo`
+would otherwise be appended next to the line it replaces. |
 | Add repositories | ansible.builtin.apt_repository | True |  |
 | Create 1Password debsig directories | ansible.builtin.file | True | 1Password's debsig-verify policy. This verifies the .deb's own signature, in
 addition to apt verifying the repository -- so it has to be in place before

@@ -350,6 +350,8 @@ _(list or block — see the file)_
 **APT: third-party repositories**
 Each entry adds a signed keyring and a sources.list.d entry. Keys are
 dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
+repo_replaces lists lines an entry used to declare, so changing `repo` does
+not leave the old line next to the new one on machines that already have it.
 vendor_sources: true marks a vendor whose package installs its own deb822
 source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
 then only bootstraps the first install and is removed once theirs exists --

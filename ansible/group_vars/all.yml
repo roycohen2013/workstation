@@ -328,6 +328,9 @@ apps_apt_absent:
 # Each entry adds a signed keyring and a sources.list.d entry. Keys are
 # dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
 #
+# repo_replaces lists lines an entry used to declare, so changing `repo` does
+# not leave the old line next to the new one on machines that already have it.
+#
 # vendor_sources: true marks a vendor whose package installs its own deb822
 # source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
 # then only bootstraps the first install and is removed once theirs exists --
@@ -359,10 +362,23 @@ apps_apt_repos:
     # This repo publishes one suite for all releases, so templating the Ubuntu
     # codename here would 404. Key fingerprint per Anthropic's docs:
     #   31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
+    #
+    # Word for word the line the package's postinst writes, arch list
+    # included. When claude-desktop.list starts with the package's marker
+    # line, the postinst rewrites the file on every upgrade; apt_repository
+    # matches lines exactly, so any difference appended a second entry for
+    # the same repo and apt warned about every target on each update.
     repo: >-
-      deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
+      deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
       https://downloads.claude.ai/claude-desktop/apt/stable
       stable main
+    # What this entry used to declare. Removed so machines that already have
+    # it are left with one line, not the old and the new side by side.
+    repo_replaces:
+      - >-
+        deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
+        https://downloads.claude.ai/claude-desktop/apt/stable
+        stable main
     packages:
       - claude-desktop
 
