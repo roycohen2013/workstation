@@ -127,6 +127,18 @@
       {{ apps_vendor_sources.results | selectattr('stat.exists')
          | map(attribute='item.name') | list }}
 
+# Before adding: apt_repository matches lines exactly, so a changed `repo`
+# would otherwise be appended next to the line it replaces.
+- name: Remove repository lines an entry no longer declares
+  ansible.builtin.apt_repository:
+    repo: "{{ item.1 }}"
+    filename: "{{ item.0.name }}"
+    state: absent
+    update_cache: false
+  loop: "{{ apps_repos_enabled | subelements('repo_replaces', skip_missing=True) }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
 - name: Add repositories
   ansible.builtin.apt_repository:
     repo: "{{ item.repo }}"

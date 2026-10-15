@@ -118,3 +118,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   dash, which has no `pipefail`, so it aborted on its own first line before
   converting, compressing, rendering docs or writing checksums -- leaving an
   uncompressed qcow2 and no release artifacts at all.
+- `apt update` no longer warns that every Claude Desktop target "is configured
+  multiple times". On a machine where `claude-desktop.list` already held the
+  vendor's line, `make apply` appended its own slightly different one; it now
+  declares the vendor's exact line and removes the one it used to add.
