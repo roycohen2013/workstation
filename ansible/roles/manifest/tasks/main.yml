@@ -31,15 +31,40 @@
 # The whole point of the manifest. Without this, a package that silently failed
 # to install ships in the image and nobody finds out until they go looking for
 # it on a running machine.
-- name: Assemble the declared package set
+#
+# This is the one place the declared set is assembled. It is written to
+# /etc/workstation-declared.json below, and everything else that needs it --
+# the image tests in tests/goss, the HTML report -- reads that file rather
+# than keeping its own copy of what group_vars says.
+
+# A pinned download of kind deb is an apt package once installed, so it is
+# declared like one -- under its package name, which may differ from its name.
+- name: Collect the packages pinned downloads install
   ansible.builtin.set_fact:
-    manifest_declared: >-
-      {{ (apps_apt_base
-          + apps_apt_dev
-          + (apps_apt_desktop if workstation_desktop_enabled | bool else [])
-          + hardware_packages
-          + (apt_repos_enabled | default([]) | map(attribute='packages') | flatten | list)
-         ) | unique | sort }}
+    manifest_pinned_debs: "{{ manifest_pinned_debs | default([]) + [item.package | default(item.name)] }}"
+  loop: "{{ pinned_downloads_enabled | default([]) | selectattr('kind', 'equalto', 'deb') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Each list mirrors the gate its installing role applies: desktop packages only
+# with the desktop, flatpaks only where roles/apps installs them.
+- name: Assemble the declared set
+  ansible.builtin.set_fact:
+    manifest_declared:
+      apt: >-
+        {{ (apps_apt_base
+            + apps_apt_dev
+            + (apps_apt_desktop if workstation_desktop_enabled | bool else [])
+            + hardware_packages
+            + (apt_repos_enabled | default([]) | map(attribute='packages') | flatten | list)
+            + manifest_pinned_debs | default([])
+           ) | unique | sort }}
+      flatpak: >-
+        {{ (apps_flatpak
+            if workstation_flatpak_enabled | bool and workstation_desktop_enabled | bool
+            else []) | sort }}
+      snap: "{{ apps_snap | map(attribute='name') | sort }}"
+      absent: "{{ apps_apt_absent | sort }}"
 
 # Compared against satisfied_names rather than real package names alone: a
 # declaration may legitimately name a virtual package, and comparing only
@@ -47,39 +72,52 @@
 # there. See the Provides handling in capture-manifest.py.
 - name: Identify declared packages missing from the image
   ansible.builtin.set_fact:
-    manifest_missing: "{{ manifest_declared | difference(manifest_data.satisfied_names) }}"
+    manifest_missing:
+      apt: "{{ manifest_declared.apt | difference(manifest_data.satisfied_names) }}"
+      flatpak: >-
+        {{ manifest_declared.flatpak
+           | difference(manifest_data.packages.flatpak | map(attribute='id')) }}
+      snap: >-
+        {{ manifest_declared.snap
+           | difference(manifest_data.packages.snap | map(attribute='name')) }}
 
 - name: Identify packages that were declared for removal but are still present
   ansible.builtin.set_fact:
     manifest_not_removed: >-
-      {{ apps_apt_absent | intersect(manifest_data.satisfied_names) }}
+      {{ manifest_declared.absent | intersect(manifest_data.satisfied_names) }}
 
 - name: Fail the build when a declared package is not installed
   ansible.builtin.assert:
     that:
-      - manifest_missing | length == 0
+      - manifest_missing.apt | length == 0
+      - manifest_missing.flatpak | length == 0
+      - manifest_missing.snap | length == 0
       - manifest_not_removed | length == 0
     fail_msg: >-
       Image does not match what group_vars declares.
-      {% if manifest_missing | length %}
-      Declared but NOT installed: {{ manifest_missing | join(', ') }}.
-      Check the package name exists for this release --
-      scripts/verify-change.sh apt {{ manifest_missing | join(' ') }}
-      {% endif %}
+      {% for kind in ['apt', 'flatpak', 'snap'] if manifest_missing[kind] | length %}
+      Declared {{ kind }} but NOT installed: {{ manifest_missing[kind] | join(', ') }}.
+      Check it exists for this release --
+      .claude/skills/config-change/scripts/verify-change.sh {{ kind }}
+      {{ manifest_missing[kind] | join(' ') }}
+      {% endfor %}
       {% if manifest_not_removed | length %}
       Declared in apps_apt_absent but still present:
       {{ manifest_not_removed | join(', ') }}.
       {% endif %}
     success_msg: >-
-      All {{ manifest_declared | length }} declared packages are installed
+      All {{ manifest_declared.apt | length }} declared apt packages,
+      {{ manifest_declared.flatpak | length }} flatpaks and
+      {{ manifest_declared.snap | length }} snaps are installed
       ({{ manifest_data.counts.apt_total }} apt packages total,
       {{ manifest_data.counts.apt_auto }} pulled in as dependencies).
 
 # Written separately rather than merged into the manifest so the capture script
 # stays a pure inventory of the machine, with no notion of what was intended.
-# render-docs.py joins the two.
+# render-docs.py joins the two, and run-goss.sh feeds this file to goss as its
+# vars, so the image tests assert the same set this role checked.
 - name: Record the declared set alongside the manifest
   ansible.builtin.copy:
-    content: "{{ {'declared': manifest_declared, 'absent': apps_apt_absent} | to_nice_json }}\n"
+    content: "{{ manifest_declared | to_nice_json }}\n"
     dest: /etc/workstation-declared.json
     mode: "0644"

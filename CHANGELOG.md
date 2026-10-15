@@ -54,6 +54,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Changed
 
+- The image build now fails when a declared flatpak or snap is missing, not
+  only an apt package, and its image tests check every declared package
+  rather than a hand-picked sample.
 - A malformed `apps_apt_repos` entry now stops `make apply` and the image build
   before anything is installed, naming the entry: an unknown or misspelt field,
   `key_armoured` without `key_path`, or a `signed-by` that is not the entry's
