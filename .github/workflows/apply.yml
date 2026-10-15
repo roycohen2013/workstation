@@ -25,8 +25,14 @@ on:
   pull_request:
   push:
     branches: [main]
+    # Everything that decides what a converge does or how it is checked: the
+    # playbook, the make target that runs it, the goss suite that verifies it
+    # and the pins it reads. Kept in step with the pull-request scope below.
     paths:
       - "ansible/**"
+      - "tests/goss/**"
+      - "Makefile"
+      - "versions.env"
       - ".github/workflows/apply.yml"
 
 permissions:
@@ -71,7 +77,7 @@ jobs:
           fi
           base='${{ github.event.pull_request.base.sha }}'
           if git diff --name-only "$base"...HEAD \
-               | grep -qE '^(ansible/|\.github/workflows/apply\.yml)'; then
+               | grep -qE '^(ansible/|tests/goss/|Makefile$|versions\.env$|\.github/workflows/apply\.yml$)'; then
             echo "needed=true" >> "$GITHUB_OUTPUT"
             echo "converging: this pull request touches ansible/"
           else
@@ -86,25 +92,20 @@ jobs:
           sudo apt-get install -y --no-install-recommends ansible make
           ansible --version
 
-      - name: Install collections
-        if: steps.scope.outputs.needed == 'true'
-        run: make deps
-
       # No --ask-become-pass: the runner has passwordless sudo. That also means
       # this job does NOT exercise the become-prompt path where sudo-rs breaks
       # -- see TROUBLESHOOTING.md. `make doctor` covers that instead.
       - name: Converge (first run)
         if: steps.scope.outputs.needed == 'true'
         env:
-          ANSIBLE_CONFIG: ${{ github.workspace }}/ansible.cfg
           ANSIBLE_FORCE_COLOR: "1"
+        # Through make, so CI converges with exactly the command line a
+        # workstation does. `make apply` installs the collections first.
+        # ASK_BECOME_PASS is cleared because the runner has passwordless sudo
+        # and no terminal to prompt on.
         run: |
-          ansible-playbook ansible/site.yml \
-            -i localhost, -c local \
-            -e workstation_phase=live \
-            -e workstation_image_version=ci-${{ github.sha }} \
-            -e dev_mise_install_runtimes=false \
-            --become
+          make apply ASK_BECOME_PASS= VERSION=ci-${{ github.sha }} \
+            ARGS='-e dev_mise_install_runtimes=false'
 
       # The real point of running it twice. A playbook that succeeds once but
       # reports changes forever is broken in a way a single run cannot show:
@@ -114,7 +115,6 @@ jobs:
         id: second
         if: steps.scope.outputs.needed == 'true'
         env:
-          ANSIBLE_CONFIG: ${{ github.workspace }}/ansible.cfg
           # ansible.cfg sets force_color, which wraps the play recap in ANSI
           # escapes -- the parsing below would then match nothing and report
           # "no play recap found" on every single run. Disabled here, and the
@@ -129,12 +129,8 @@ jobs:
           # diff, or for apt the packages it upgraded and removed. Without it
           # the log reads only "changed", and each non-idempotent task has to
           # be diagnosed by guessing at what it did.
-          ansible-playbook ansible/site.yml \
-            -i localhost, -c local \
-            -e workstation_phase=live \
-            -e workstation_image_version=ci-${{ github.sha }} \
-            -e dev_mise_install_runtimes=false \
-            --become --diff | tee second-run.log
+          make apply ASK_BECOME_PASS= VERSION=ci-${{ github.sha }} \
+            ARGS='-e dev_mise_install_runtimes=false --diff' | tee second-run.log
 
       - name: Report idempotence
         if: always() && steps.scope.outputs.needed == 'true'

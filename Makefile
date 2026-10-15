@@ -52,6 +52,22 @@ export ANSIBLE_CONFIG := $(CURDIR)/ansible.cfg
 SUDO_WS    := $(shell command -v sudo.ws 2>/dev/null)
 BECOME_EXE := $(if $(SUDO_WS),-e ansible_become_exe=$(SUDO_WS),)
 
+# The one converge command line. `make apply`, `make apply-check` and both runs
+# in .github/workflows/apply.yml build on it, so CI converges exactly the way a
+# workstation does -- before, the same flags were written out four times and
+# had already drifted (apply-check never passed workstation_image_version).
+# Packer's ansible provisioner runs the same playbook for the image phase but
+# invokes ansible-playbook itself; its flags live in packer/workstation.pkr.hcl.
+#
+# ASK_BECOME_PASS is cleared by CI, whose runners have passwordless sudo and no
+# terminal to prompt on: `make apply ASK_BECOME_PASS=`.
+ASK_BECOME_PASS ?= --ask-become-pass
+CONVERGE = ansible-playbook $(PLAYBOOK) \
+  -i localhost, -c local \
+  -e workstation_phase=live \
+  -e workstation_image_version=$(VERSION) \
+  $(BECOME_EXE) $(ASK_BECOME_PASS)
+
 .PHONY: help
 help: ## Show this help
 	@echo "Workstation image build"
@@ -76,39 +92,11 @@ deps: ## Install Ansible collections
 
 .PHONY: check-tools
 check-tools:
-	@missing=""
-	for t in packer qemu-img ansible-playbook; do
-	  command -v $$t >/dev/null || missing="$$missing $$t"
-	done
-	if [ -n "$$missing" ]; then
-	  echo "Missing required tools:$$missing"
-	  echo "  Ubuntu: sudo apt install qemu-utils qemu-system-x86 ovmf ansible"
-	  echo "  Packer: https://developer.hashicorp.com/packer/install"
-	  exit 1
-	fi
-	if [ ! -e /dev/kvm ]; then
-	  echo "/dev/kvm is missing -- the build needs hardware virtualisation."
-	  echo "Enable VT-x/AMD-V in firmware. On WSL2, also enable nested"
-	  echo "virtualisation (nestedVirtualization=true in .wslconfig on Windows)."
-	  exit 1
-	fi
-	if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
-	  echo "/dev/kvm exists but this user cannot access it (device group: $$(stat -c %G /dev/kvm 2>/dev/null))."
-	  echo "This is the single most common first-build failure: qemu starts,"
-	  echo "gets 'Permission denied' opening /dev/kvm, and Packer only reports"
-	  echo "the generic 'Qemu failed to start' -- after downloading the ISO and"
-	  echo "waiting through the boot timeout first."
-	  echo
-	  echo "Fix:"
-	  echo "    sudo usermod -aG kvm $$USER"
-	  echo "    # then log out and back in (or reboot) -- a new group only takes"
-	  echo "    # effect in a new login session, not the current shell"
-	  echo
-	  echo "Confirm before re-running make image:"
-	  echo "    groups                 # should list kvm"
-	  echo "    qemu-system-x86_64 -enable-kvm -m 256 -nographic -serial none"
-	  exit 1
-	fi
+	@# The build's prerequisites -- tools and an accessible /dev/kvm -- checked
+	@# by doctor, so the two cannot drift apart again (they had: different tool
+	@# lists, two copies of the KVM diagnosis). Fails before the ISO download
+	@# rather than as Packer's generic "Qemu failed to start" an hour later.
+	@scripts/doctor.sh --build
 
 # --- Build --------------------------------------------------------------------
 
@@ -131,13 +119,9 @@ image: check-tools init deps ## Build the image (qcow2 + raw)
 	  -var "image_name=$(IMAGE_NAME)" \
 	  -var "output_dir=$(BUILD_DIR)" \
 	  $(ARGS) \
-	  packer/ || exit $$?
-	@# `|| exit $$?` is load-bearing. This Makefile sets .ONESHELL, so the whole
-	@# recipe is one shell and make reads only the LAST command's status -- which
-	@# is the `|| true` below, always zero. Without this, a packer build that
-	@# errored reported success to CI, printed "Built ..." underneath "no
-	@# artifacts were created", and only went red because the workflow's summary
-	@# step tripped over the missing directory afterwards.
+	  packer/
+	@# No `|| exit` needed after packer: .SHELLFLAGS carries -e, so a failed
+	@# build stops the recipe here instead of printing "Built ..." below it.
 	@echo
 	@echo "Built $(ARTIFACT_DIR)/$(IMAGE_NAME)-$(VERSION).{qcow2,raw}.zst"
 	@ls -lh $(ARTIFACT_DIR)/ 2>/dev/null || true
@@ -191,20 +175,11 @@ flash: ## Write an image to a disk. Usage: make flash DEV=/dev/sdX
 
 .PHONY: apply
 apply: deps ## Converge THIS machine to the config (no reimage)
-	ansible-playbook $(PLAYBOOK) \
-	  -i localhost, -c local \
-	  -e workstation_phase=live \
-	  -e workstation_image_version=$(VERSION) \
-	  $(BECOME_EXE) \
-	  --ask-become-pass $(ARGS)
+	$(CONVERGE) $(ARGS)
 
 .PHONY: apply-check
 apply-check: deps ## Show what `make apply` would change, without changing it
-	ansible-playbook $(PLAYBOOK) \
-	  -i localhost, -c local \
-	  -e workstation_phase=live \
-	  $(BECOME_EXE) \
-	  --check --diff --ask-become-pass $(ARGS)
+	$(CONVERGE) --check --diff $(ARGS)
 
 .PHONY: verify
 verify: ## Check THIS machine against what it was last converged to (after make apply)
@@ -235,10 +210,18 @@ docs-config: ## Regenerate the committed reference docs from source
 	@# docsible writes a README.md into each role directory, which is where
 	@# someone browsing that role on GitHub will look for it. It warns about
 	@# absent tests/test.yml on every role; that is expected, not a problem.
-	@for role in ansible/roles/*/; do \
+	@# A failure must fail the target: lint-docs discards this output and only
+	@# diffs the result, so a docsible that failed left every README untouched,
+	@# the diff empty, and lint-docs green over docs nothing had regenerated.
+	@failed=""
+	for role in ansible/roles/*/; do
 	  docsible --role "$$role" --comments --no-docsible --no-backup >/dev/null 2>&1 \
-	    || echo "  docsible failed for $$role"; \
+	    || failed="$$failed $$role"
 	done
+	if [ -n "$$failed" ]; then
+	  echo "docsible failed for:$$failed" >&2
+	  exit 1
+	fi
 	python3 scripts/gen-config-docs.py
 
 .PHONY: docs-diff
@@ -281,13 +264,23 @@ lint-yaml:
 .PHONY: lint-ansible
 lint-ansible:
 	ansible-lint ansible/
-	ansible-playbook $(PLAYBOOK) -i localhost, -c local \
-	  -e workstation_phase=image --syntax-check
+	@# Both phases: each gates different roles, so one alone leaves the other's
+	@# tasks unparsed.
+	for phase in image live; do
+	  echo "--- phase=$$phase"
+	  ansible-playbook $(PLAYBOOK) -i localhost, -c local \
+	    -e "workstation_phase=$$phase" --syntax-check
+	done
 
 .PHONY: lint-packer
 lint-packer:
+	@# A full validate, not -syntax-only: that skips evaluating locals, so a
+	@# broken expression -- the versions.env lookup, say -- passes lint and
+	@# fails at build time. Like lint-terraform's validate, it needs the
+	@# plugins and therefore network on a cold run.
 	packer fmt -check -diff packer/
-	packer validate -syntax-only packer/
+	packer init packer/ >/dev/null
+	packer validate packer/
 
 .PHONY: lint-terraform
 # fmt alone only checks layout. CI has always run `validate` as well and local
