@@ -372,10 +372,33 @@
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
 
+# Keyed on what is at <binary> now, not on whether <binary>.real exists.
+# dpkg does not track .real, so a version bump writes the NEW binary over our
+# wrapper and leaves the OLD one sitting at .real; a `creates:` guard on .real
+# would then skip the move, the wrapper would be rewritten over the new binary,
+# and the old release's binary would run against the new release's resources.
+# So: if <binary> is anything other than our wrapper -- a fresh install or an
+# upgrade alike -- it is the real binary and goes to .real, replacing whatever
+# was there. The marker is the wrapper's "Managed by Ansible" line, which
+# wrappers written before this check already carry.
 - name: Move the real binary aside
-  ansible.builtin.command:
-    cmd: mv "{{ apps_etcher_real_binary.stdout }}" "{{ apps_etcher_real_binary.stdout }}.real"
-    creates: "{{ apps_etcher_real_binary.stdout }}.real"
+  ansible.builtin.shell:
+    cmd: |
+      set -euo pipefail
+      bin="{{ apps_etcher_real_binary.stdout }}"
+      if grep -qF 'Managed by Ansible (roles/apps)' <(head -c 512 "$bin"); then
+        if [ -e "$bin.real" ]; then
+          echo unchanged
+          exit 0
+        fi
+        echo "$bin is the wrapper but $bin.real is missing; reinstall balena-etcher" >&2
+        exit 1
+      fi
+      mv -f "$bin" "$bin.real"
+      echo moved
+    executable: /bin/bash
+  register: apps_etcher_move_aside
+  changed_when: apps_etcher_move_aside.stdout == 'moved'
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
