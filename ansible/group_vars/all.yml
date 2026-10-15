@@ -282,8 +282,10 @@ apps_apt_absent:
 # packages from it. roles/apt_repos does the work and checks every entry before
 # touching anything, so a missing or misspelt field fails the run up front.
 #
-# - `name`: the entry's name. Our source file is sources.list.d/<name>.list,
-#   and the keyring defaults to /etc/apt/keyrings/<name>.gpg.
+# - `name`: the entry's name. Our source file is a deb822
+#   sources.list.d/workstation-<name>.sources, and the keyring defaults to
+#   /etc/apt/keyrings/<name>.gpg. A one-line <name>.list, which older
+#   versions wrote, is removed.
 # - `enabled`: optional feature switch.
 # - `key_url`: the vendor's signing key, fetched on every converge so a
 #   rotated key is picked up.
@@ -291,15 +293,18 @@ apps_apt_absent:
 #   its own -- see the vendors below for why matching it matters.
 # - `key_armoured`: install the key as the .asc the vendor publishes, rather
 #   than dearmoured. Needs `key_path`.
-# - `repo`: the deb line. Its signed-by must name the keyring path above;
-#   anything else is refused, because it fails later as a signature error
-#   that reads like a network fault.
-# - `repo_replaces`: lines an entry used to declare, so changing `repo` does
-#   not leave the old line next to the new one on machines that have it.
-# - `vendor_sources`: the vendor's package installs its own deb822 source at
-#   sources.list.d/<name>.sources and disables ours. Our entry then only
-#   bootstraps the first install and is removed once theirs exists. Without
-#   it the two fight, and every converge reports a change.
+# - `repo`: the deb line, as the vendor documents it:
+#   `deb [options] uri suite [components]`. It is written out as deb822.
+#   Its signed-by must name the keyring path above; anything else is refused,
+#   because it fails later as a signature error that reads like a network
+#   fault.
+# - `vendor_sources`: the vendor's package writes its own deb822 source at
+#   sources.list.d/<name>.sources on every install and upgrade. Our entry then
+#   only bootstraps the first install and is removed once theirs exists.
+#   Without it the origin stays declared twice.
+# - `vendor_opt_out`: a setting that stops the vendor's package adding an apt
+#   source of its own, as `file`, `setting` and `value`. Written before the
+#   package installs, because its postinst reads it.
 # - `debsig_key_id` and `debsig_policy_url`: a debsig-verify policy, which
 #   checks the .deb's own signature on top of apt's repository signature.
 # - `packages`: what to install from it. Never list these in apps_apt_base:
@@ -333,21 +338,20 @@ apps_apt_repos:
     #   31DDDE24DDFAB679F42D7BD2BAA929FF1A7ECACE
     #
     # Word for word the line the package's postinst writes, arch list
-    # included. When claude-desktop.list starts with the package's marker
-    # line, the postinst rewrites the file on every upgrade; apt_repository
-    # matches lines exactly, so any difference appended a second entry for
-    # the same repo and apt warned about every target on each update.
+    # included, so the two never disagree about the repository.
     repo: >-
       deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
       https://downloads.claude.ai/claude-desktop/apt/stable
       stable main
-    # What this entry used to declare. Removed so machines that already have
-    # it are left with one line, not the old and the new side by side.
-    repo_replaces:
-      - >-
-        deb [arch=amd64 signed-by=/usr/share/keyrings/claude-desktop-archive-keyring.asc]
-        https://downloads.claude.ai/claude-desktop/apt/stable
-        stable main
+    # Its postinst writes claude-desktop.list, a second declaration of the
+    # same origin, whenever that path is free -- which it is, now that ours
+    # is deb822. This is the opt-out its postinst documents. The postinst
+    # never added a source here before either: it leaves alone a .list it
+    # did not write, and ours used to sit at that path.
+    vendor_opt_out:
+      file: /etc/default/claude-desktop
+      setting: CLAUDE_DESKTOP_ADD_REPO
+      value: '"false"'
     packages:
       - claude-desktop
 
@@ -362,8 +366,10 @@ apps_apt_repos:
       deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg]
       https://dl.google.com/linux/chrome/deb/
       stable main
-    # Chrome's postinst writes google-chrome.sources and deletes our .list,
-    # whatever /etc/default/google-chrome says.
+    # Chrome's postinst writes google-chrome.sources on a first install,
+    # whatever /etc/default/google-chrome says, and keeps it on upgrade. Its
+    # URIs is .../linux/chrome-stable/deb/, not this line's: ours only has to
+    # last until the package installs.
     vendor_sources: true
     packages:
       - google-chrome-stable
@@ -378,7 +384,8 @@ apps_apt_repos:
       deb [arch=amd64 signed-by=/usr/share/keyrings/1password-archive-keyring.gpg]
       https://downloads.1password.com/linux/debian/amd64
       stable main
-    # 1Password's postinst writes 1password.sources and comments out our .list.
+    # 1Password's postinst writes 1password.sources on every install and
+    # upgrade, with the same Signed-By as this line.
     vendor_sources: true
     # The policy lives in a directory named after the long ID of 1Password's
     # signing key, confirmed to match the key they publish. Keep it checked
@@ -457,16 +464,16 @@ apps_apt_repos:
   # Vendor key path, not this repo's default. Packer and Terraform are
   # requirements of this project, so a machine is very likely to have already
   # installed them by following HashiCorp's own instructions -- which write
-  # /etc/apt/sources.list.d/hashicorp.list, the same file apt_repository
-  # writes, with signed-by pointing at their path. Declaring our own path
-  # there appends a second line for the same origin, and apt then refuses to
-  # read its source list at all:
+  # /etc/apt/sources.list.d/hashicorp.list with signed-by pointing at their
+  # path. Any other path declares the same origin with a second key, and apt
+  # then refuses to read its source list at all:
   #   E:Conflicting values set for option Signed-By regarding source
   #   https://apt.releases.hashicorp.com/ ... E:The list of sources could not
   #   be read.
-  # Matching their documented layout makes our line identical to theirs, so
-  # the two collapse into one instead of conflicting. The key itself is the
-  # same either way -- verified byte-identical (sha256) at both paths.
+  # roles/apt_repos removes hashicorp.list on every converge, but following
+  # those instructions again writes it back; matching their documented layout
+  # keeps that harmless until then. The key itself is the same either way --
+  # verified byte-identical (sha256) at both paths.
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg

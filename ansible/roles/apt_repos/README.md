@@ -42,8 +42,8 @@ Description: Third-party APT repositories, their signing keys, and the packages 
 | [apt_repos_fields.**3**](vars/main.yml#L8)   | str | `key_path` |    
 | [apt_repos_fields.**4**](vars/main.yml#L9)   | str | `key_armoured` |    
 | [apt_repos_fields.**5**](vars/main.yml#L10)   | str | `repo` |    
-| [apt_repos_fields.**6**](vars/main.yml#L11)   | str | `repo_replaces` |    
-| [apt_repos_fields.**7**](vars/main.yml#L12)   | str | `vendor_sources` |    
+| [apt_repos_fields.**6**](vars/main.yml#L11)   | str | `vendor_sources` |    
+| [apt_repos_fields.**7**](vars/main.yml#L12)   | str | `vendor_opt_out` |    
 | [apt_repos_fields.**8**](vars/main.yml#L13)   | str | `debsig_key_id` |    
 | [apt_repos_fields.**9**](vars/main.yml#L14)   | str | `debsig_policy_url` |    
 | [apt_repos_fields.**10**](vars/main.yml#L15)   | str | `packages` |    
@@ -76,7 +76,7 @@ any one vendor key would be trusted to sign any package.
 Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
 file against what it fetches and reports ok when they match -- but only if
 the file is still there. Deleting it made this task, and the dearmour and
-apt_repository tasks below it, report changed on every single converge; the
+source tasks below it, report changed on every single converge; the
 CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
 also survives a reboot. This is public key material, a few KB per vendor. |
 | Fetch repository signing keys | ansible.builtin.get_url | False | Retried rather than left to fail: get_url contacts every one of these URLs
@@ -108,21 +108,42 @@ deterministic, so the copy reports a change only when the key really did. |
 | Install repository signing keys (dearmoured) | ansible.builtin.copy | True |  |
 | Install repository signing keys (armoured, verbatim) | ansible.builtin.copy | True |  |
 | Set keyring permissions | ansible.builtin.file | False |  |
-| Check which vendors already manage their own apt source | ansible.builtin.stat | False | Some vendors' postinst replaces the source this role declares with its own
-deb822 file, /etc/apt/sources.list.d/<name>.sources, and then disables ours:
-1Password comments out our .list, Chrome deletes it. Either way, re-adding
-ours on the next converge only restarts the fight, and CI's idempotence pass
-reported "Add repositories" changed on every run because of it.
+| Check which vendors already manage their own apt source | ansible.builtin.stat | False | Some vendors' postinst writes its own deb822 source,
+/etc/apt/sources.list.d/<name>.sources, on every install and upgrade:
+1Password and Chrome both do. Declaring ours as well, on every converge,
+would leave each origin declared twice for good.
 
 Our entry is only needed to bootstrap: once the vendor's .sources exists it
 is authoritative and ours is redundant. So entries marked vendor_sources in
 group_vars stop being declared here once that file exists, and our leftover
-.list is removed after the packages install, below -- leaving exactly one
-declaration of each origin. |
+bootstrap source is removed after the packages install, below -- leaving
+exactly one declaration of each origin. |
 | Note which vendors own their apt source | ansible.builtin.set_fact | False |  |
-| Remove repository lines an entry no longer declares | ansible.builtin.apt_repository | False | Before adding: apt_repository matches lines exactly, so a changed `repo`
-would otherwise be appended next to the line it replaces. |
-| Add repositories | ansible.builtin.apt_repository | True |  |
+| Install the deb822 sources library | ansible.builtin.apt | False | deb822_repository parses and writes sources through python3-debian.
+Installed before the old .list files go, so a failure here leaves the
+machine with the sources it had rather than with none. |
+| Note that sources cannot be previewed yet | ansible.builtin.debug | True | `make apply-check` installs nothing, and deb822_repository cannot even
+preview a change without the library -- so on the one check run before it
+is installed, the source tasks are skipped rather than failed. |
+| Remove one-line sources an older version of this role wrote | ansible.builtin.file | False | Older versions of this role wrote each source with apt_repository, as a
+one-line sources.list.d/<name>.list. That module is deprecated in favour of
+deb822_repository, so sources are now deb822 files -- and the .list is
+removed first, or apt would read every repository twice and warn about it
+on each update. A <name>.list someone wrote by hand from the vendor's
+install docs (HashiCorp's, for one) goes too: it declares the same origin. |
+| Translate repository lines into deb822 fields | ansible.builtin.set_fact | False | The one-line `repo` in group_vars stays the single source of truth -- it is
+what vendors document and what scripts/verify-repos.py checks -- and is split
+into deb822 fields here. The assert above has already checked its shape. |
+| Add repositories | ansible.builtin.deb822_repository | True | Named workstation-<name>, never plain <name>, for two reasons:
+- <name>.sources is exactly where vendor_sources vendors write their own
+file, and the stat above tells the two apart by that path. Sharing it
+would hand the file back and forth between us and their postinst.
+- deb822_repository derives a keyring path from the same name, and with
+state=absent deletes /etc/apt/keyrings/<name>.gpg -- the very keyring
+this role installs for the default key_path. |
+| Refresh the package lists after a source changed | ansible.builtin.apt | True | Refreshed here rather than by a handler: the packages below install from
+these repositories, and a handler would not run until the end of the play.
+deb822_repository, unlike apt_repository, never refreshes the cache itself. |
 | Create debsig directories | ansible.builtin.file | False | debsig-verify policies, for entries that declare debsig_key_id. Where apt
 verifies the repository, debsig verifies the .deb's own signature -- so the
 policy has to be in place before the package installs, not after.
@@ -134,6 +155,12 @@ and `make verify-repos` checks the id against the published key, rather than
 trusting either. |
 | Install debsig policies | ansible.builtin.get_url | False |  |
 | Install debsig keyrings | ansible.builtin.command | False | The repository's own signing key, from the cache filled above. |
+| Tell vendor packages not to add an apt source of their own | ansible.builtin.lineinfile | False | Some vendors' postinst adds a source of its own unless told not to.
+Claude Desktop writes claude-desktop.list whenever that path is free, which
+it is now that ours is deb822: the same origin declared twice, a warning on
+every apt update, and the list removed again by the next converge. Its
+documented opt-out is a setting in /etc/default/claude-desktop, read by the
+postinst -- so it has to be in place before the package installs. |
 | Install packages from third-party repositories | ansible.builtin.apt | True | latest, not present: base upgrades everything before these repositories
 are added, so a package already installed from elsewhere -- a .deb fetched
 by hand, or the GitHub runner's preinstalled docker-ce and Chrome -- would
@@ -146,10 +173,10 @@ takes every package to latest on every converge, so this adds none. |
 every image build, and every CI runner -- that check ran before the vendor's
 package was installed, so it was false: our .list was written to bootstrap,
 then the postinst wrote .sources. Reusing that stale answer skipped the
-cleanup, shipped the dead .list in every image, and left it for the second
-converge to delete, which made CI's idempotence pass report a change on
-every run. If a future postinst ever stops writing .sources, this stays
-false and our .list is kept: apt still has a working source. |
+cleanup, shipped the dead bootstrap source in every image, and left it for
+the second converge to delete, which made CI's idempotence pass report a
+change on every run. If a future postinst ever stops writing .sources, this
+stays false and ours is kept: apt still has a working source. |
 | Remove our bootstrap apt source where the vendor's has replaced it | ansible.builtin.file | False |  |
 
 

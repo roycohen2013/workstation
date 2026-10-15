@@ -98,11 +98,21 @@ command:
 {{- end }}
 {{- range .Vars.vendor_sources }}
   # Exactly one apt declaration of this origin: the vendor's deb822 file.
-  # Its postinst writes it and disables our bootstrap .list, which
-  # roles/apt_repos then removes. A .list back on disk means the two are
-  # fighting again and every `make apply` reports a change.
+  # Its postinst writes it, and roles/apt_repos then removes our bootstrap
+  # workstation-<name>.sources. Ours back on disk, or a one-line .list, means
+  # the origin is declared twice and every `make apply` reports a change.
   {{ printf "%s-single-apt-source" . | printf "%q" }}:
-    exec: {{ printf "test -s /etc/apt/sources.list.d/%s.sources && test ! -e /etc/apt/sources.list.d/%s.list && echo single" . . | printf "%q" }}
+    exec: {{ printf "test -s /etc/apt/sources.list.d/%s.sources && test ! -e /etc/apt/sources.list.d/workstation-%s.sources && test ! -e /etc/apt/sources.list.d/%s.list && echo single" . . . | printf "%q" }}
+    exit-status: 0
+    stdout: ["single"]
+{{- end }}
+{{- range .Vars.own_sources }}
+  # Exactly one apt declaration of this origin: ours. A <name>.list beside it
+  # is either the one-line source an older roles/apt_repos wrote, never
+  # cleaned up, or the vendor's package adding its own -- for Claude Desktop,
+  # its vendor_opt_out has stopped working.
+  {{ printf "%s-single-apt-source" . | printf "%q" }}:
+    exec: {{ printf "test -s /etc/apt/sources.list.d/workstation-%s.sources && test ! -e /etc/apt/sources.list.d/%s.list && echo single" . . | printf "%q" }}
     exit-status: 0
     stdout: ["single"]
 {{- end }}

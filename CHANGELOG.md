@@ -63,6 +63,12 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - Every pull request now checks that a converged machine matches what
   `group_vars` declares, not only that the playbook ran, and flipping a
   feature flag no longer breaks the next image build on a stale test.
+- Third-party apt repositories are now declared as deb822 files,
+  `/etc/apt/sources.list.d/workstation-<name>.sources`. `make apply` removes
+  the one-line `<name>.list` each one used to have, including a
+  `hashicorp.list` written by hand from HashiCorp's install docs, and sets
+  `CLAUDE_DESKTOP_ADD_REPO="false"` in `/etc/default/claude-desktop` so its
+  package does not add a second declaration of the same repository.
 - The image build now fails when a declared flatpak or snap is missing, not
   only an apt package, and its image tests check every declared package
   rather than a hand-picked sample.

@@ -68,17 +68,19 @@ keyring lives -- and since Packer and Terraform are requirements of this
 project, HashiCorp's own instructions had usually already written
 `/etc/apt/sources.list.d/hashicorp.list` before `make apply` ever ran.
 
-It also happens across formats. Some vendors' packages (Chrome, 1Password)
-replace the one-line `<name>.list` this repo writes with their own deb822
-`<name>.sources` file, and Ubuntu 24.04+ ships its archive as `ubuntu.sources`.
-A `.list` line left beside a `.sources` stanza for the same origin, with a
-different key, conflicts just the same. A `.sources` stanza names its key in a
+It also happens across formats. This repo writes each source as a deb822
+`workstation-<name>.sources` file, some vendors' packages (Chrome, 1Password)
+write their own `<name>.sources`, and Ubuntu 24.04+ ships its archive as
+`ubuntu.sources`. A one-line `.list` -- from a vendor's install docs, or
+written by an older version of this repo -- left beside a `.sources` stanza
+for the same origin, with a different key, conflicts just the same. A `.sources` stanza names its key in a
 `Signed-By:` field: either a path, or an inline key block that counts as a
 different value from any path.
 
-**Fix.** Already handled for HashiCorp: `group_vars` uses the vendor's
-documented `key_path`, so the two declarations are byte-identical and collapse
-into one. `make doctor` reports any origin declared with more than one key,
+**Fix.** `make apply` removes the `<name>.list` of every repository it
+manages, HashiCorp's included, and `group_vars` uses HashiCorp's documented
+`key_path`, so following their instructions again afterwards adds a duplicate
+rather than a conflict. `make doctor` reports any origin declared with more than one key,
 in either format, naming each key and the file it came from. To clear a
 duplicate `.list` line by hand:
 
@@ -137,19 +139,21 @@ in `group_vars` (default `/etc/apt/keyrings/<name>.gpg`). Entries marked
 
 A warning per target on every `apt update`; nothing actually fails.
 
-**Cause.** One file holds two lines for the same repository that differ only
-in options -- typically the vendor's own line, written by its package or by
-hand from its install docs, and this repo's. `apt_repository` matches lines
-exactly, so a different `arch=` list or option order counts as a different
-repository and both stay. Claude Desktop did this: its package writes
+**Cause.** The same repository declared twice with the same key, in one file
+or two -- typically the vendor's own declaration, written by its package or by
+hand from its install docs, beside this repo's. Older versions of this repo
+wrote one-line `.list` files with `apt_repository`, which matches lines
+exactly, so a vendor line differing only in its `arch=` list was added next to
+ours rather than replacing it. Claude Desktop did this: its package writes
 `arch=amd64,arm64`, and this repo used to write `arch=amd64`.
 
-**Fix.** For Claude Desktop, `make apply` -- the entry now declares the
-vendor's exact line and removes the one it used to add. For another vendor,
-set the entry's `repo` to the vendor's line exactly and list the old line
-under `repo_replaces`, so machines that already have it lose it. By hand:
-delete the extra line from the file named in the warning and run
-`sudo apt-get update`.
+**Fix.** `make apply`: it now writes each source as a whole deb822
+`workstation-<name>.sources` file and removes the `<name>.list` an older
+version wrote. If the warning names a vendor's own file beside ours, that
+vendor's package writes a source of its own: mark its entry `vendor_sources`
+when it writes `<name>.sources`, or give it a `vendor_opt_out` when it has a
+setting to stop that. By hand: delete the extra declaration from the file
+named in the warning and run `sudo apt-get update`.
 
 ---
 
