@@ -73,7 +73,7 @@ not at all until someone switches it on.
 written out would keep fetching the old release after a bump, whose checksum
 no longer matches, and the failure would read as a tampered download. |
 | Select enabled pinned downloads | ansible.builtin.set_fact | True | `enabled` is usually a template referencing a feature switch, which renders
-to a string, and a non-empty "False" is truthy -- the same trap roles/apps
+to a string, and a non-empty "False" is truthy -- the same trap roles/apt_repos
 documents for apps_apt_repos. An explicit `| bool` is the only reliable test. |
 | Install pinned downloads | ansible.builtin.include_tasks | False |  |
 

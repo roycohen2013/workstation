@@ -223,16 +223,18 @@ def main():
         worst = 1 if 1 in (worst, rc) else max(worst, rc)
         print()
 
-    # 1Password derives its debsig policy directory from the long ID of its
-    # signing key. Nothing about the repository check touches that, and a wrong
-    # value fails silently -- the policy lands where dpkg never looks and the
-    # install still succeeds -- so it is checked against the published key here.
-    debsig = data.get("apps_1password_debsig_key_id")
-    onepw = next((r for r in repos if r.get("name") == "1password"), None)
-    if debsig and onepw and not a.only:
-        print("--- 1password debsig key id")
+    # A debsig policy lives in a directory named after the long ID of the
+    # vendor's signing key. Nothing about the repository check touches that,
+    # and a wrong value fails silently -- the policy lands where dpkg never
+    # looks and the install still succeeds -- so it is checked against the
+    # published key here.
+    for entry in repos:
+        if not entry.get("debsig_key_id") or (a.only and a.only != entry.get("name")):
+            continue
+        print(f"--- {entry.get('name', '?')} debsig key id")
         rc = subprocess.run(
-            ["bash", str(VERIFY), "keyid", onepw.get("key_url", ""), str(debsig)]
+            ["bash", str(VERIFY), "keyid", entry.get("key_url", ""),
+             str(entry["debsig_key_id"])]
         ).returncode
         if rc not in (0, 1, 2):
             print(f"  ! verify-change.sh exited {rc} -- the check did not run")

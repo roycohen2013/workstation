@@ -109,19 +109,6 @@ workstation_balena_etcher_enabled: true
 workstation_1password_enabled: true
 workstation_nimbalyst_enabled: true
 
-# 1Password additionally documents a debsig-verify policy, which checks the
-# .deb's own signature on top of apt's repository signature. The policy lives
-# in a directory named after 1Password's signing key ID.
-#
-# The directory name is derived from the long ID of 1Password's signing key,
-# and has been confirmed to match the key they publish.
-#
-# Keep it checked rather than assumed: a wrong value fails silently, because
-# the policy lands where dpkg never looks, stays inert, and apt install
-# succeeds anyway. `make verify-repos` re-verifies it against the published
-# key, so a rotation shows up as a failure instead of as an image that
-# quietly stops validating the packages it installs.
-apps_1password_debsig_key_id: AC2D62742012EA22
 workstation_firewall_enabled: true
 workstation_ssh_server_enabled: false   # laptops rarely want inbound SSH
 
@@ -281,16 +268,32 @@ apps_apt_absent:
   - conky-all
 
 # --- APT: third-party repositories -------------------------------------------
-# Each entry adds a signed keyring and a sources.list.d entry. Keys are
-# dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
+# Each entry adds a signed keyring and a sources.list.d entry, then installs its
+# packages from it. roles/apt_repos does the work and checks every entry before
+# touching anything, so a missing or misspelt field fails the run up front.
 #
-# repo_replaces lists lines an entry used to declare, so changing `repo` does
-# not leave the old line next to the new one on machines that already have it.
-#
-# vendor_sources: true marks a vendor whose package installs its own deb822
-# source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
-# then only bootstraps the first install and is removed once theirs exists --
-# see roles/apps. Without it the two fight, and every converge reports a change.
+# - `name`: the entry's name. Our source file is sources.list.d/<name>.list,
+#   and the keyring defaults to /etc/apt/keyrings/<name>.gpg.
+# - `enabled`: optional feature switch.
+# - `key_url`: the vendor's signing key, fetched on every converge so a
+#   rotated key is picked up.
+# - `key_path`: where the keyring goes, when the vendor documents a path of
+#   its own -- see the vendors below for why matching it matters.
+# - `key_armoured`: install the key as the .asc the vendor publishes, rather
+#   than dearmoured. Needs `key_path`.
+# - `repo`: the deb line. Its signed-by must name the keyring path above;
+#   anything else is refused, because it fails later as a signature error
+#   that reads like a network fault.
+# - `repo_replaces`: lines an entry used to declare, so changing `repo` does
+#   not leave the old line next to the new one on machines that have it.
+# - `vendor_sources`: the vendor's package installs its own deb822 source at
+#   sources.list.d/<name>.sources and disables ours. Our entry then only
+#   bootstraps the first install and is removed once theirs exists. Without
+#   it the two fight, and every converge reports a change.
+# - `debsig_key_id` and `debsig_policy_url`: a debsig-verify policy, which
+#   checks the .deb's own signature on top of apt's repository signature.
+# - `packages`: what to install from it. Never list these in apps_apt_base:
+#   apt would try to install them before the repository exists.
 apps_apt_repos:
   - name: docker
     enabled: "{{ workstation_docker_enabled }}"
@@ -311,7 +314,7 @@ apps_apt_repos:
     key_url: https://downloads.claude.ai/claude-desktop/key.asc
     # This vendor documents an exact keyring path, and its package registers
     # its own sources.list.d entry pointing there. Matching it means apt keeps
-    # working whichever entry ends up on disk -- see roles/apps.
+    # working whichever entry ends up on disk -- see roles/apt_repos.
     key_armoured: true
     key_path: /usr/share/keyrings/claude-desktop-archive-keyring.asc
     # Suite is literally "stable" -- NOT the Ubuntu codename.
@@ -367,6 +370,15 @@ apps_apt_repos:
       stable main
     # 1Password's postinst writes 1password.sources and comments out our .list.
     vendor_sources: true
+    # The policy lives in a directory named after the long ID of 1Password's
+    # signing key, confirmed to match the key they publish. Keep it checked
+    # rather than assumed: a wrong value fails silently, because the policy
+    # lands where dpkg never looks, stays inert, and apt install succeeds
+    # anyway. `make verify-repos` re-verifies it against the published key, so
+    # a rotation shows up as a failure instead of as an image that quietly
+    # stops validating the packages it installs.
+    debsig_key_id: AC2D62742012EA22
+    debsig_policy_url: https://downloads.1password.com/linux/debian/debsig/1password.pol
     packages:
       - 1password
 
@@ -390,19 +402,6 @@ apps_apt_repos:
     packages:
       - code
 
-  # Vendor key path, not this repo's default. Packer and Terraform are
-  # requirements of this project, so a machine is very likely to have already
-  # installed them by following HashiCorp's own instructions -- which write
-  # /etc/apt/sources.list.d/hashicorp.list, the same file apt_repository
-  # writes, with signed-by pointing at their path. Declaring our own path
-  # there appends a second line for the same origin, and apt then refuses to
-  # read its source list at all:
-  #   E:Conflicting values set for option Signed-By regarding source
-  #   https://apt.releases.hashicorp.com/ ... E:The list of sources could not
-  #   be read.
-  # Matching their documented layout makes our line identical to theirs, so
-  # the two collapse into one instead of conflicting. The key itself is the
-  # same either way -- verified byte-identical (sha256) at both paths.
   - name: claude-code
     enabled: "{{ workstation_claude_code_enabled }}"
     key_url: https://downloads.claude.ai/keys/claude-code.asc
@@ -445,6 +444,19 @@ apps_apt_repos:
     packages:
       - gh
 
+  # Vendor key path, not this repo's default. Packer and Terraform are
+  # requirements of this project, so a machine is very likely to have already
+  # installed them by following HashiCorp's own instructions -- which write
+  # /etc/apt/sources.list.d/hashicorp.list, the same file apt_repository
+  # writes, with signed-by pointing at their path. Declaring our own path
+  # there appends a second line for the same origin, and apt then refuses to
+  # read its source list at all:
+  #   E:Conflicting values set for option Signed-By regarding source
+  #   https://apt.releases.hashicorp.com/ ... E:The list of sources could not
+  #   be read.
+  # Matching their documented layout makes our line identical to theirs, so
+  # the two collapse into one instead of conflicting. The key itself is the
+  # same either way -- verified byte-identical (sha256) at both paths.
   - name: hashicorp
     enabled: true
     key_url: https://apt.releases.hashicorp.com/gpg

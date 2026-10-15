@@ -29,7 +29,7 @@
     label: "{{ item.name | default('?') }}"
 
 # `enabled` is usually a template referencing a feature switch, which renders
-# to a string, and a non-empty "False" is truthy -- the same trap roles/apps
+# to a string, and a non-empty "False" is truthy -- the same trap roles/apt_repos
 # documents for apps_apt_repos. An explicit `| bool` is the only reliable test.
 - name: Select enabled pinned downloads
   ansible.builtin.set_fact:

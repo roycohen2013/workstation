@@ -209,21 +209,6 @@ downloads, declared in pinned_downloads below with their versions.
 
 `true`
 
-### `apps_1password_debsig_key_id`
-
-`AC2D62742012EA22`
-
-1Password additionally documents a debsig-verify policy, which checks the
-.deb's own signature on top of apt's repository signature. The policy lives
-in a directory named after 1Password's signing key ID.
-The directory name is derived from the long ID of 1Password's signing key,
-and has been confirmed to match the key they publish.
-Keep it checked rather than assumed: a wrong value fails silently, because
-the policy lands where dpkg never looks, stays inert, and apt install
-succeeds anyway. `make verify-repos` re-verifies it against the published
-key, so a rotation shows up as a failure instead of as an image that
-quietly stops validating the packages it installs.
-
 ### `workstation_firewall_enabled`
 
 `true`
@@ -288,14 +273,31 @@ Packages to remove (Ubuntu ships a few things you may not want).
 _(list or block — see the file)_
 
 **APT: third-party repositories**
-Each entry adds a signed keyring and a sources.list.d entry. Keys are
-dearmoured to /etc/apt/keyrings, never added to the deprecated global keyring.
-repo_replaces lists lines an entry used to declare, so changing `repo` does
-not leave the old line next to the new one on machines that already have it.
-vendor_sources: true marks a vendor whose package installs its own deb822
-source at /etc/apt/sources.list.d/<name>.sources and disables ours. Our entry
-then only bootstraps the first install and is removed once theirs exists --
-see roles/apps. Without it the two fight, and every converge reports a change.
+Each entry adds a signed keyring and a sources.list.d entry, then installs its
+packages from it. roles/apt_repos does the work and checks every entry before
+touching anything, so a missing or misspelt field fails the run up front.
+- `name`: the entry's name. Our source file is sources.list.d/<name>.list,
+  and the keyring defaults to /etc/apt/keyrings/<name>.gpg.
+- `enabled`: optional feature switch.
+- `key_url`: the vendor's signing key, fetched on every converge so a
+  rotated key is picked up.
+- `key_path`: where the keyring goes, when the vendor documents a path of
+  its own -- see the vendors below for why matching it matters.
+- `key_armoured`: install the key as the .asc the vendor publishes, rather
+  than dearmoured. Needs `key_path`.
+- `repo`: the deb line. Its signed-by must name the keyring path above;
+  anything else is refused, because it fails later as a signature error
+  that reads like a network fault.
+- `repo_replaces`: lines an entry used to declare, so changing `repo` does
+  not leave the old line next to the new one on machines that have it.
+- `vendor_sources`: the vendor's package installs its own deb822 source at
+  sources.list.d/<name>.sources and disables ours. Our entry then only
+  bootstraps the first install and is removed once theirs exists. Without
+  it the two fight, and every converge reports a change.
+- `debsig_key_id` and `debsig_policy_url`: a debsig-verify policy, which
+  checks the .deb's own signature on top of apt's repository signature.
+- `packages`: what to install from it. Never list these in apps_apt_base:
+  apt would try to install them before the repository exists.
 
 ### `pinned_downloads`
 

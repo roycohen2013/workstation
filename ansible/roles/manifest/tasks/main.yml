@@ -38,7 +38,7 @@
           + apps_apt_dev
           + (apps_apt_desktop if workstation_desktop_enabled | bool else [])
           + hardware_packages
-          + (apps_repos_enabled | default([]) | map(attribute='packages') | flatten | list)
+          + (apt_repos_enabled | default([]) | map(attribute='packages') | flatten | list)
          ) | unique | sort }}
 
 # Compared against satisfied_names rather than real package names alone: a

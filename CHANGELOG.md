@@ -54,6 +54,10 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Changed
 
+- A malformed `apps_apt_repos` entry now stops `make apply` and the image build
+  before anything is installed, naming the entry: an unknown or misspelt field,
+  `key_armoured` without `key_path`, or a `signed-by` that is not the entry's
+  own keyring. Previously these surfaced mid-run as a signature error.
 - Image compression level is now the `compression_level` build variable, defaulting
   to 12 instead of a hard-coded 19. Level 19 took roughly nine times longer for a
   2.9-percentage-point smaller image; override it with

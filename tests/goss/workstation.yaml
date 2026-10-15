@@ -185,7 +185,7 @@ command:
   # exist under the configured ID rather than assuming the ID is right.
   1password-debsig-policy-installed:
     exec: |
-      id=$(cat /etc/workstation-debsig-id)
+      id=$(cat /etc/workstation-debsig/1password)
       test -s "/etc/debsig/policies/${id}/1password.pol" \
         && test -s "/usr/share/debsig/keyrings/${id}/debsig.gpg" \
         && echo installed
