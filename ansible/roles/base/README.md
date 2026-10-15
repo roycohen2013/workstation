@@ -69,17 +69,29 @@ off actually takes the banner away instead of leaving a stale file behind. |
 | Grant passwordless sudo | ansible.builtin.copy | False |  |
 | Install authorized SSH keys | ansible.posix.authorized_key | True |  |
 | Remove the superseded sysctl file | ansible.builtin.file | False | --- Kernel tuning ------------------------------------------------------------
-99-, not 60-. sysctl.d files apply in lexicographic order across
-/usr/lib/sysctl.d and /etc/sysctl.d, and the distribution already ships
-entries that set values this repo also sets -- 30-localsearch.conf claims
-fs.inotify.max_user_watches, 55-map-count.conf claims vm.max_map_count. At
-60- this file happens to win against those, but it loses to anything in the
-90s, which is where images and provisioning tools conventionally put their
-own overrides. The CI idempotence pass showed exactly that: on a runner,
-fs.inotify.max_user_watches was reported changed on every converge because
-something applied after us put it back. 99- is the conventional slot for
-local overrides and is what this file should always have used. |
+99-, the conventional slot for local overrides. At boot systemd-sysctl applies
+every sysctl.d file in lexicographic order, so a 99- file wins against the
+distribution's own entries for the same keys -- 30-localsearch.conf for
+fs.inotify.max_user_watches, 55-map-count.conf for vm.max_map_count. File
+order only decides the boot-time result, though; it does nothing against a
+package that applies one file by name at runtime. See the localsearch mask
+below for the case that does exactly that. |
 | Apply sysctl settings | ansible.posix.sysctl | False |  |
+| Mask localsearch's inotify limit with ours | ansible.builtin.copy | True | localsearch's postinst runs `systemd-sysctl 30-localsearch.conf` on every
+install and every upgrade. That applies its file alone -- no ordering against
+ours -- and its file sets fs.inotify.max_user_watches to 65536, an eighth of
+ours. So each localsearch update quietly dropped the limit until the next
+reboot or converge, and editors watching large trees hit "System limit for
+number of file watchers reached". It is also why the CI idempotence pass
+reported this key changed on every run: the desktop role installs localsearch
+after the task above, and the second converge put the value back.
+
+systemd resolves a bare sysctl.d filename through its search path, where
+/etc/sysctl.d shadows /usr/lib/sysctl.d. A file of the same name here carrying
+our value turns their postinst's reset into a no-op, and changes nothing at
+boot, where 99-workstation.conf already wins. It is written in base, before
+the desktop role installs localsearch, so the very first install respects it. |
+| Remove the localsearch mask when no watcher limit is set | ansible.builtin.file | True |  |
 | Install zram-tools | ansible.builtin.apt | True |  |
 | Configure zram | ansible.builtin.copy | True |  |
 | Build a portable initramfs (MODULES=most) | ansible.builtin.lineinfile | False | --- Boot ---------------------------------------------------------------------

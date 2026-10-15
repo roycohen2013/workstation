@@ -188,6 +188,18 @@ command:
     exit-status: 0
     stdout: ["installed"]
 
+  # localsearch's postinst re-applies 30-localsearch.conf by name on every
+  # upgrade, which would drop the file-watcher limit to 65536; our same-named
+  # file in /etc shadows it. Both halves are asserted: if a future localsearch
+  # renames its file, the mask silently guards nothing, and this fails instead.
+  inotify-limit-masks-localsearch:
+    exec: |
+      grep -q '^fs.inotify.max_user_watches' /etc/sysctl.d/30-localsearch.conf \
+        && test -e /usr/lib/sysctl.d/30-localsearch.conf \
+        && echo masked
+    exit-status: 0
+    stdout: ["masked"]
+
   # VS Code must come from apt only. A leftover snap would put a second copy on
   # the image with its own updater, and nothing else here would notice.
   vscode-not-also-a-snap:
