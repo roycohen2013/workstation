@@ -62,6 +62,11 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   it updates with the rest of the system and integrates with the shell `code` command.
 - Repeated `make apply` runs no longer re-download things that are already installed,
   and settle without reporting changes on a second pass.
+- Scrolling is natural on both the touchpad and a mouse: scrolling up moves the
+  content up, the way a touchscreen does. Both directions are declared in
+  `desktop_dconf`, so the two devices agree. It stays changeable in GNOME
+  Settings, and a machine where it was already set by hand keeps that value
+  until `dconf reset /org/gnome/desktop/peripherals/touchpad/natural-scroll`.
 
 ### Removed
 

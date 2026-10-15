@@ -591,7 +591,8 @@ desktop_dconf:
   - { key: /org/gnome/desktop/interface/clock-show-weekday, value: "true" }
   - { key: /org/gnome/desktop/interface/show-battery-percentage, value: "true" }
   - { key: /org/gnome/desktop/peripherals/touchpad/tap-to-click, value: "true" }
-  - { key: /org/gnome/desktop/peripherals/touchpad/natural-scroll, value: "false" }
+  - { key: /org/gnome/desktop/peripherals/touchpad/natural-scroll, value: "true" }
+  - { key: /org/gnome/desktop/peripherals/mouse/natural-scroll, value: "true" }
   - { key: /org/gnome/desktop/wm/preferences/focus-mode, value: "'click'" }
   - { key: /org/gnome/mutter/dynamic-workspaces, value: "false" }
   - { key: /org/gnome/desktop/wm/preferences/num-workspaces, value: "4" }
