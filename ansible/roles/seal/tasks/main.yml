@@ -2,6 +2,12 @@
 # Strips everything machine-specific and build-specific, turning a configured
 # VM into a generic, redistributable template. Image phase only.
 #
+# What a role leaves behind that only it understands -- the SSH server's host
+# keys, the desktop's stamp cache, power services left on -- that role cleans
+# up itself, in an optional tasks/seal.yml found and run below. This role keeps
+# only what belongs to no role: the build marker, package caches, machine
+# identity, cloud-init, logs.
+#
 # What is NOT done here: removing the build account. Packer is still logged in
 # as it and needs it to issue the shutdown. That final step runs from
 # workstation-seal-final, detached, as the shutdown command -- see below.
@@ -27,6 +33,10 @@
       WORKSTATION_USER={{ workstation_user }}
     dest: /etc/workstation-release
     mode: "0644"
+
+# --- Each role's own image-phase half -----------------------------------------
+- name: Run each role's image-phase hook
+  ansible.builtin.import_tasks: hooks.yml
 
 # --- Package caches -----------------------------------------------------------
 # autoremove only. The apt module runs one cleanup per task and then exits, so
@@ -54,31 +64,6 @@
   loop:
     - /etc/machine-id
     - /var/lib/dbus/machine-id
-
-# The security role cannot do this during a build -- Packer is connected over
-# the very service it would be stopping -- so it lands here instead. Disabling
-# (not stopping) keeps the current session alive until shutdown.
-- name: Disable the SSH server in the image
-  ansible.builtin.systemd:
-    name: ssh
-    enabled: "{{ workstation_ssh_server_enabled | bool }}"
-  failed_when: false
-
-- name: Remove SSH host keys
-  ansible.builtin.shell:
-    cmd: rm -f /etc/ssh/ssh_host_*
-  changed_when: true
-
-# The desktop info stamp names one machine's hostname and IP. It can only be
-# written by a logged-in graphical session, which a Packer build does not have,
-# so in practice it should never exist here -- removed anyway rather than
-# resting on that reasoning, because it lives under a home directory that IS in
-# the image, and a wallpaper announcing the build VM's identity on every
-# flashed laptop is exactly the class of defect seal exists to prevent.
-- name: Remove any desktop info stamp
-  ansible.builtin.file:
-    path: "/home/{{ workstation_user }}/.cache/workstation"
-    state: absent
 
 # --- cloud-init ---------------------------------------------------------------
 # cloud-init did its job during the install. Left enabled, it would try to

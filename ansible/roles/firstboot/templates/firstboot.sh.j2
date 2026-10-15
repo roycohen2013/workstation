@@ -9,6 +9,11 @@
 # Failure of any single step is logged and skipped rather than fatal: a
 # machine that boots with an unresized root filesystem is recoverable, one
 # that fails to finish booting is not.
+#
+# This script does only what belongs to no role -- the disk, machine identity,
+# the bootloader, the hostname. A role whose image-phase cleanup needs undoing
+# on the target machine (SSH host keys, power management) installs its own
+# step into firstboot.d from its tasks/seal.yml, and step 5 runs them.
 
 set -uo pipefail
 
@@ -53,11 +58,6 @@ if [ ! -s /etc/machine-id ]; then
     systemd-machine-id-setup || warn "machine-id generation failed"
 fi
 
-if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
-    log "generating SSH host keys"
-    ssh-keygen -A || warn "SSH host key generation failed"
-fi
-
 # --- 3. Install the bootloader for THIS firmware ------------------------------
 # The image already boots -- this re-runs grub-install against the real disk so
 # the ESP matches the machine.
@@ -91,17 +91,15 @@ if [ -z "$current" ] || [ "$current" = "workstation-build" ] || [ "$current" = "
     hostnamectl set-hostname "{{ workstation_hostname_default }}" || warn "hostname not set"
 fi
 
-# --- 5. Power management, on real hardware only -------------------------------
-# Left disabled in the image because tlp on a VM throttles a machine that has
-# no battery to save.
-virt=$(systemd-detect-virt 2>/dev/null || echo none)
-if [ "$virt" = "none" ]; then
-    log "physical hardware detected; enabling power management"
-    systemctl enable --now tlp thermald 2>/dev/null || warn "power services not enabled"
-    fwupdmgr refresh --force >/dev/null 2>&1 || true
-else
-    log "running under $virt; leaving power management disabled"
-fi
+# --- 5. Each role's own first-boot steps ---------------------------------------
+# Installed by roles/*/tasks/seal.yml, named NN-what.sh and run in that order.
+# Run as separate processes, so one that exits early cannot end this script,
+# and a failure is logged and skipped like every other step here.
+for step in /usr/local/lib/workstation/firstboot.d/*.sh; do
+    [ -e "$step" ] || continue
+    log "running $(basename "$step")"
+    "$step" || warn "$(basename "$step") failed"
+done
 
 # --- Done ---------------------------------------------------------------------
 date -uIs > "$STAMP"
