@@ -147,7 +147,7 @@ apps_apt_base:
   - tree
   - unzip
   - zip
-  - p7zip-full
+  - 7zip
   - zstd
   - rsync
   - jq
@@ -157,7 +157,7 @@ apps_apt_base:
   - bat
   - ncdu
   - net-tools
-  - dnsutils
+  - bind9-dnsutils
   - traceroute
   - nmap
   - tcpdump
