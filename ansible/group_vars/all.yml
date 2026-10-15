@@ -500,11 +500,11 @@ pinned_downloads:
   - name: balena-etcher
     enabled: "{{ workstation_balena_etcher_enabled | bool and workstation_desktop_enabled | bool }}"
     kind: deb
-    version: "2.1.6"
+    version: "2.1.7"
     url: >-
       https://github.com/balena-io/etcher/releases/download/v{version}/balena-etcher_{version}_amd64.deb
     # From the release's combined SHA256SUMS.Linux.x64.txt.
-    checksum: sha256:2bdebb46c9f750a9abf11c188ff69a405b4a4fed114333d634c3b3fe59a64057
+    checksum: sha256:9dbea6165ddee1ec1f1b7a38fe92f0d2c54c6217710438a7af6752c267d19395
 
   # Nimbalyst: an open-source visual workspace for coding agents (Claude Code,
   # Codex, OpenCode). Linux ships as an AppImage and nothing else -- no apt

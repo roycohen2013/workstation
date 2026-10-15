@@ -61,6 +61,7 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   before anything is installed, naming the entry: an unknown or misspelt field,
   `key_armoured` without `key_path`, or a `signed-by` that is not the entry's
   own keyring. Previously these surfaced mid-run as a signature error.
+- BalenaEtcher is updated to 2.1.7.
 - Image compression level is now the `compression_level` build variable, defaulting
   to 12 instead of a hard-coded 19. Level 19 took roughly nine times longer for a
   2.9-percentage-point smaller image; override it with
@@ -84,6 +85,9 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - `make verify-repos` now checks Nimbalyst's pinned AppImage, which it had
   never covered, and `--checksums` verifies its sha512 rather than assuming
   every pin is sha256.
+- BalenaEtcher runs the new release after its pinned version is bumped. Before,
+  `make apply` left the previous release's binary behind its `--no-sandbox`
+  wrapper and overwrote the new one, so the upgrade never took effect.
 - `make apply` no longer times out on Ubuntu 26.04, whose `sudo-rs` does not present
   the password prompt Ansible's become plugin expects.
 - `make apply` no longer fails on a machine with no SSH server installed, or with

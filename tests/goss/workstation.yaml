@@ -41,7 +41,7 @@ file:
     exists: true   # firstboot is armed; without this the image never adapts
   /etc/workstation-release:
     exists: true
-    contains:
+    contents:
       - /^WORKSTATION_VERSION=/
       - /^WORKSTATION_BUILD_DATE=/
 
@@ -50,7 +50,7 @@ file:
   # unfamiliar hardware.
   /etc/initramfs-tools/initramfs.conf:
     exists: true
-    contains:
+    contents:
       - "MODULES=most"
 
   # --- Interactive shell ------------------------------------------------------
@@ -58,11 +58,11 @@ file:
   # logged into long before anything runs `make apply`.
   /etc/profile.d/zz-workstation-fastfetch.sh:
     exists: true
-    contains:
+    contents:
       - "fastfetch"
   /etc/skel/.bashrc:
     exists: true
-    contains:
+    contents:
       # skel is what users created after imaging inherit, so the alias block
       # landing here is what makes it reach them at all.
       - "alias sysinfo="
@@ -72,7 +72,7 @@ file:
     exists: true
   /etc/dconf/profile/user:
     exists: true
-    contains: ["system-db:local"]
+    contents: ["system-db:local"]
 
   # --- Machine identity is blank --------------------------------------------
   # Non-empty here means every machine from this image shares an identity.
