@@ -68,16 +68,39 @@ keyring lives -- and since Packer and Terraform are requirements of this
 project, HashiCorp's own instructions had usually already written
 `/etc/apt/sources.list.d/hashicorp.list` before `make apply` ever ran.
 
+It also happens across formats. Some vendors' packages (Chrome, 1Password)
+replace the one-line `<name>.list` this repo writes with their own deb822
+`<name>.sources` file, and Ubuntu 24.04+ ships its archive as `ubuntu.sources`.
+A `.list` line left beside a `.sources` stanza for the same origin, with a
+different key, conflicts just the same. A `.sources` stanza names its key in a
+`Signed-By:` field: either a path, or an inline key block that counts as a
+different value from any path.
+
 **Fix.** Already handled for HashiCorp: `group_vars` uses the vendor's
 documented `key_path`, so the two declarations are byte-identical and collapse
-into one. `make doctor` reports any origin with more than one `signed-by`. To
-clear one by hand:
+into one. `make doctor` reports any origin declared with more than one key,
+in either format, naming each key and the file it came from. To clear a
+duplicate `.list` line by hand:
 
 ```bash
 grep -rn signed-by /etc/apt/sources.list.d/<name>.list   # find the duplicate
 sudo sed -i '\|signed-by=/wrong/path.gpg|d' /etc/apt/sources.list.d/<name>.list
 sudo apt-get update
 ```
+
+When the conflict is between a `.list` line and a vendor's `.sources` file,
+keep the `.sources` file and delete the `.list`. The vendor's package rewrites
+its `.sources` on every upgrade, so editing it doesn't stick:
+
+```bash
+grep -rni signed-by /etc/apt/sources.list.d/   # both formats
+sudo rm /etc/apt/sources.list.d/<name>.list
+sudo apt-get update
+```
+
+If the repo's entry in `group_vars` isn't marked `vendor_sources: true`, mark
+it. Then `make apply` removes the bootstrap `.list` itself once the vendor's
+`.sources` exists, instead of writing it back.
 
 When adding a repo, prefer the vendor's documented keyring path over this
 repo's default whenever their install instructions write a sources file too.
