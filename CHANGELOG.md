@@ -71,9 +71,10 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 - `make apply` no longer times out on Ubuntu 26.04, whose `sudo-rs` does not present
   the password prompt Ansible's become plugin expects.
-- `make apply` no longer fails on a machine with no SSH server installed, and no
-  longer fails on a fresh install where the mise configuration directory did not yet
-  exist.
+- `make apply` no longer fails on a machine with no SSH server installed, or with
+  one installed but not running -- which includes every freshly flashed machine,
+  since the image ships the server disabled. It also no longer fails on a fresh
+  install where the mise configuration directory did not yet exist.
 - GNOME desktop defaults actually apply: the dconf database is compiled after it is
   written.
 - apt no longer refuses to read its sources because of a duplicate HashiCorp

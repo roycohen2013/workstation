@@ -63,6 +63,24 @@
   register: security_sshd_confdir
   when: workstation_phase == 'live'
 
+# `sshd -t`, the validate step below, refuses to run without /run/sshd:
+# "Missing privilege separation directory: /run/sshd". Nothing creates that
+# directory at boot -- openssh-server ships no tmpfiles.d entry; it exists only
+# while ssh.service runs, via RuntimeDirectory=sshd, and goes again when it
+# stops. So wherever the server is installed but not running, the first
+# converge that writes the drop-in failed: a fresh CI runner, and a freshly
+# flashed machine, whose image ships the server disabled and gets this drop-in
+# only at `make apply`. /run is tmpfs, so nothing here outlives a reboot, and a
+# running service simply adopts the directory.
+- name: Ensure sshd's privilege separation directory exists
+  ansible.builtin.file:
+    path: /run/sshd
+    state: directory
+    mode: "0755"
+  when:
+    - workstation_phase == 'live'
+    - security_sshd_confdir.stat.exists | default(false)
+
 - name: Configure SSH server
   ansible.builtin.copy:
     content: |
