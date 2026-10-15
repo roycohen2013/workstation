@@ -183,10 +183,18 @@
     creates: "/usr/share/debsig/keyrings/{{ apps_1password_debsig_key_id }}/debsig.gpg"
   when: workstation_1password_enabled | bool
 
+# latest, not present: base upgrades everything before these repositories
+# are added, so a package already installed from elsewhere -- a .deb fetched
+# by hand, or the GitHub runner's preinstalled docker-ce and Chrome -- would
+# count as present at its old version and only catch up on the next converge.
+# CI's idempotence pass reported exactly that as base's upgrade changing every
+# run. Where the package is new or already current this is the same as present.
+# package-latest guards against unpinned drift; base's dist-upgrade already
+# takes every package to latest on every converge, so this adds none.
 - name: Install packages from third-party repositories
   ansible.builtin.apt:
     name: "{{ apps_repos_enabled | map(attribute='packages') | flatten }}"
-    state: present
+    state: latest  # noqa: package-latest
   when: apps_repos_enabled | length > 0
 
 # Checked again now, not reused from the check above. On a first converge --
