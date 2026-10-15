@@ -23,7 +23,7 @@
     content: |
       WORKSTATION_VERSION={{ workstation_image_version }}
       WORKSTATION_BUILD_DATE={{ workstation_build_date }}
-      WORKSTATION_UBUNTU={{ ansible_distribution_version }}
+      WORKSTATION_UBUNTU={{ ansible_facts['distribution_version'] }}
       WORKSTATION_USER={{ workstation_user }}
     dest: /etc/workstation-release
     mode: "0644"
