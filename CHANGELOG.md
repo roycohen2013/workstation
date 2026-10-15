@@ -79,6 +79,10 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   written.
 - apt no longer refuses to read its sources because of a duplicate HashiCorp
   repository entry.
+- `make apply` now installs a vendor's rotated apt signing key. When HashiCorp
+  replaced its key on 9 September 2026, machines converged before then failed
+  every `apt update` with `NO_PUBKEY FC9CA96ACA026560`, and re-running
+  `make apply` did not repair them.
 - `make image` now retries cleanly after an interrupted build instead of failing on
   the output directory the previous attempt left behind.
 - `make iso` no longer corrupts the installer ISO's boot arguments, and finds the
