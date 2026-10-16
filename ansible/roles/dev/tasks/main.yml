@@ -58,12 +58,37 @@
 # --- Language runtimes --------------------------------------------------------
 # mise keeps toolchains in the user's home rather than the system, so runtime
 # versions can be bumped without a rebuild -- and so the image stays generic.
+#
+# The installer is fetched only while mise is missing. Fetching it on every
+# converge served nothing -- the run below is skipped once mise exists -- and
+# broke `make apply-check`: check mode's get_url sends a HEAD request, which
+# mise.run answers with 405 Method Not Allowed.
+- name: Check whether mise is installed
+  ansible.builtin.stat:
+    path: "/home/{{ workstation_user }}/.local/bin/mise"
+  register: dev_mise_binary
+  when: dev_mise_enabled | bool
+
 - name: Install mise
   ansible.builtin.get_url:
     url: https://mise.run
     dest: /tmp/mise-install.sh
     mode: "0755"
-  when: dev_mise_enabled | bool
+  when:
+    - dev_mise_enabled | bool
+    - not dev_mise_binary.stat.exists
+    - not ansible_check_mode
+
+- name: Note that the mise installer is not fetched in check mode
+  ansible.builtin.debug:
+    msg: >-
+      mise is not installed yet; `make apply` downloads and runs its
+      installer. Not fetched here, because mise.run refuses the HEAD request
+      check mode would send.
+  when:
+    - dev_mise_enabled | bool
+    - not dev_mise_binary.stat.exists
+    - ansible_check_mode
 
 - name: Run mise installer
   become: true
@@ -73,7 +98,9 @@
     creates: "/home/{{ workstation_user }}/.local/bin/mise"
   environment:
     MISE_QUIET: "1"
-  when: dev_mise_enabled | bool
+  when:
+    - dev_mise_enabled | bool
+    - not dev_mise_binary.stat.exists
 
 # Must run BEFORE the copy below: ansible.builtin.copy does not create missing
 # parent directories, and mise's installer does not create ~/.config/mise

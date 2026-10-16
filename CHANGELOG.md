@@ -107,6 +107,8 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
   machine has installed -- so the preview failed on files it had never
   fetched and judged a stale or missing inventory. Those lookups now run in
   check mode, and what a real run would install is reported, not failed on.
+  The mise installer is no longer fetched on every converge either, only
+  while mise is missing: mise.run refuses the HEAD request check mode sends.
 - The desktop stamp shows "no network" on a machine with no network route
   instead of failing on every refresh and leaving the wallpaper unstamped.
 - `make doctor` now catches an apt origin declared with two different keys
