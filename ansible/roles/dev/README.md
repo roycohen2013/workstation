@@ -49,9 +49,16 @@ against pipx 1.8.0's own --help, the version resolute ships, rather than
 assumed from current docs. |
 | Add user to the docker group | ansible.builtin.user | True | --- Docker ------------------------------------------------------------------- |
 | Enable docker | ansible.builtin.systemd | True |  |
-| Install mise | ansible.builtin.get_url | True | --- Language runtimes --------------------------------------------------------
+| Check whether mise is installed | ansible.builtin.stat | True | --- Language runtimes --------------------------------------------------------
 mise keeps toolchains in the user's home rather than the system, so runtime
-versions can be bumped without a rebuild -- and so the image stays generic. |
+versions can be bumped without a rebuild -- and so the image stays generic.
+
+The installer is fetched only while mise is missing. Fetching it on every
+converge served nothing -- the run below is skipped once mise exists -- and
+broke `make apply-check`: check mode's get_url sends a HEAD request, which
+mise.run answers with 405 Method Not Allowed. |
+| Install mise | ansible.builtin.get_url | True |  |
+| Note that the mise installer is not fetched in check mode | ansible.builtin.debug | True |  |
 | Run mise installer | ansible.builtin.command | True |  |
 | Ensure mise config directory exists | ansible.builtin.file | True | Must run BEFORE the copy below: ansible.builtin.copy does not create missing
 parent directories, and mise's installer does not create ~/.config/mise
