@@ -117,6 +117,7 @@ make flash DEV=/dev/sdX   write an image to a disk
 make docs       render this build's contents as a browsable HTML report
 make docs-config  regenerate the committed reference docs under docs/
 make lint       run every linter
+make test-scripts  run the shell script tests in tests/scripts
 make lint-commits  check commit messages against the convention
 ```
 
@@ -150,6 +151,7 @@ packer/                      build template + autoinstall seed
 iso/                         autoinstall seed for the installer ISO
 terraform/artifacts/         image bucket
 terraform/testlab/           throwaway VM for verifying a build
+tests/scripts/               tests for the shell scripts roles install
 tests/goss/                  assertions: shared.yaml after any converge (apply
                              CI, `make verify`), image.yaml inside the build
 scripts/                     flash, fetch, publish, build-iso

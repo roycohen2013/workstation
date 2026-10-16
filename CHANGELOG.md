@@ -101,6 +101,8 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Fixed
 
+- The desktop stamp shows "no network" on a machine with no network route
+  instead of failing on every refresh and leaving the wallpaper unstamped.
 - `make doctor` now catches an apt origin declared with two different keys
   when one declaration is a deb822 `.sources` file, such as Chrome's,
   1Password's or Ubuntu's own `ubuntu.sources`. Before, it read only one-line

@@ -33,59 +33,51 @@
 # mode without it is Etcher not starting at the exact moment you are trying
 # to flash a drive.
 #
-# The binary to wrap is discovered from the package's own .desktop file
-# rather than a hardcoded path: electron-builder's install layout has varied
-# across releases, and a guessed path that turns out wrong would silently
-# skip the wrapper instead of failing loudly.
-- name: Find BalenaEtcher's desktop launcher
-  ansible.builtin.shell:
-    cmd: set -o pipefail && dpkg -L balena-etcher | grep -E '\.desktop$' | head -1
-    executable: /bin/bash
-  register: apps_etcher_desktop_file
-  changed_when: false
+# The binary to wrap is discovered from the package's own .desktop file by
+# files/launcher-binary.sh, rather than from a hard-coded path: electron-
+# builder's install layout has varied across releases, and a guessed path that
+# turns out wrong would silently skip the wrapper instead of failing loudly.
+# Installed rather than run from here because the image test checks the
+# wrapper with the same script, so the two agree on which file is the binary.
+# Created here, not assumed: only roles/firstboot makes this directory, and it
+# runs in the image phase alone, so on a machine converged by `make apply` it
+# does not exist.
+- name: Create the directory for the launcher-binary helper
+  ansible.builtin.file:
+    path: /usr/local/lib/workstation
+    state: directory
+    mode: "0755"
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
 
-- name: Read its Exec line
-  ansible.builtin.shell:
-    cmd: >-
-      set -o pipefail &&
-      grep -m1 '^Exec=' "{{ apps_etcher_desktop_file.stdout }}" | sed 's/^Exec=//'
-    executable: /bin/bash
-  register: apps_etcher_exec_line
-  changed_when: false
+- name: Install the launcher-binary helper
+  ansible.builtin.copy:
+    src: launcher-binary.sh
+    dest: /usr/local/lib/workstation/launcher-binary
+    mode: "0755"
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
-    - apps_etcher_desktop_file.stdout | default('') | length > 0
 
-- name: Resolve the real binary the launcher points at
-  ansible.builtin.shell:
-    cmd: |
-      set -o pipefail
-      cmd=$(echo "{{ apps_etcher_exec_line.stdout | default('') }}" | awk '{print $1}')
-      case "$cmd" in
-        /*) bin="$cmd" ;;
-        *)  bin=$(command -v "$cmd" || true) ;;
-      esac
-      [ -n "$bin" ] && readlink -f "$bin"
-    executable: /bin/bash
+- name: Resolve the real binary BalenaEtcher's launcher runs
+  ansible.builtin.command:
+    cmd: /usr/local/lib/workstation/launcher-binary balena-etcher
   register: apps_etcher_real_binary
   changed_when: false
+  failed_when: false
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
-    - apps_etcher_exec_line.stdout | default('') | length > 0
 
 - name: Fail loudly if the real binary could not be resolved
   ansible.builtin.assert:
-    that: apps_etcher_real_binary.stdout | default('') | length > 0
+    that: apps_etcher_real_binary.rc == 0 and apps_etcher_real_binary.stdout | length > 0
     fail_msg: >-
       Could not resolve BalenaEtcher's real binary from its .desktop file
-      (Exec={{ apps_etcher_exec_line.stdout | default('unknown') }}). Without it the
-      --no-sandbox wrapper cannot be installed, and the package would ship in
-      a state this repo has decided is not acceptable to ship silently.
+      ({{ apps_etcher_real_binary.stderr | default('no output') }}). Without
+      it the --no-sandbox wrapper cannot be installed, and the package would
+      ship in a state this repo has decided is not acceptable to ship silently.
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
