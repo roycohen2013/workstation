@@ -39,8 +39,11 @@
         item.vendor_opt_out is not defined or
         (item.vendor_opt_out.keys() | sort) == ['file', 'setting', 'value']
       # No backslashes: ansible-core releases disagree on whether a Jinja
-      # string literal unescapes them, so [[] and [^ ] stand in for \[ and \S.
-      - item.repo | default('') is match('deb [[][^]]*[]] [^ ]+ [^ ]+( [^ ]+)*$')
+      # string literal unescapes them, so [^ ] stands in for \S. Nor [[] for
+      # \[: Python warns that a set opening with [ may nest one day. The
+      # opening "deb [" is compared as a plain string instead.
+      - (item.repo | default(''))[:5] == 'deb ['
+      - (item.repo | default(''))[5:] is match('[^]]*[]] [^ ]+ [^ ]+( [^ ]+)*$')
       - >-
         item.repo | default('') is search('signed-by=' ~ (item.key_path
         | default('/etc/apt/keyrings/' ~ item.name | default('') ~ '.gpg')
@@ -270,14 +273,15 @@
                              | first | default('')).split(',') | select | list,
            'signed_by': _opts | regex_findall('(?:^| )signed-by=([^ ]+)') | first,
          }}) }}
-  # Written without backslashes, as the assert above explains.
+  # Split as a string rather than matched, for the reasons the assert above
+  # gives. Its shape is guaranteed there: "deb [", options, "]", then words.
   vars:
     _repo: >-
       {{ item.repo | trim }}
     _opts: >-
-      {{ _repo | regex_findall('^deb [[]([^]]*)[]]') | first }}
+      {{ _repo[5:].split(']', 1)[0] }}
     _words: >-
-      {{ (_repo | regex_replace('^deb [[][^]]*[]] ', '')).split() }}
+      {{ _repo.split(']', 1)[1].split() }}
   loop: "{{ apt_repos_own_sources }}"
   loop_control:
     label: "{{ item.name }}"
