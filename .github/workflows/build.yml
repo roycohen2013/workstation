@@ -75,7 +75,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             qemu-system-x86 qemu-utils ovmf xorriso zstd
-          pip install --quiet ansible
+          pip install --quiet ansible "ansible-core<${ANSIBLE_CORE_CEILING}"
 
       - uses: hashicorp/setup-packer@main
         with:

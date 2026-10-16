@@ -33,8 +33,13 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Read tool version pins
+        run: grep -E '^[A-Z_]+=' versions.env >> "$GITHUB_ENV"
+
       - name: Install Ansible tooling
-        run: pip install --quiet ansible ansible-lint yamllint
+        run: >-
+          pip install --quiet ansible ansible-lint yamllint
+          "ansible-core<${ANSIBLE_CORE_CEILING}"
 
       - name: yamllint
         run: make lint-yaml
