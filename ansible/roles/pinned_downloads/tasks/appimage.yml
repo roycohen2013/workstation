@@ -8,8 +8,13 @@
     path: "{{ pinned_downloads_item.dest | dirname }}"
     state: directory
     mode: "0755"
+  register: pinned_downloads_dir
 
+# Check mode reports the directory without creating it, and get_url refuses a
+# destination whose directory is missing: on a machine without this AppImage
+# the preview would fail here instead of saying it would install it.
 - name: Install {{ pinned_downloads_item.name }}
+  when: not (ansible_check_mode and pinned_downloads_dir is changed)
   ansible.builtin.get_url:
     url: "{{ pinned_downloads_url }}"
     dest: "{{ pinned_downloads_item.dest }}"

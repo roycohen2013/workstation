@@ -42,7 +42,9 @@ Description: Installs software fetched from a release URL, pinned by version and
 installed program, and get_url with a checksum re-verifies an existing file
 and reports ok, so a converge does not re-fetch it. A version bump changes
 the checksum, which is what makes get_url fetch the new release. |
-| Install {{ pinned_downloads_item.name }} | ansible.builtin.get_url | False |  |
+| Install {{ pinned_downloads_item.name }} | ansible.builtin.get_url | True | Check mode reports the directory without creating it, and get_url refuses a
+destination whose directory is missing: on a machine without this AppImage
+the preview would fail here instead of saying it would install it. |
 
 #### File: tasks/deb.yml
 
@@ -58,7 +60,8 @@ download, install and cleanup all reported changed forever, which is what
 CI's idempotence pass reports. |
 | Install {{ pinned_downloads_item.name }} | block | True |  |
 | Download {{ pinned_downloads_item.name }} | ansible.builtin.get_url | False |  |
-| Install the package for {{ pinned_downloads_item.name }} | ansible.builtin.apt | False |  |
+| Install the package for {{ pinned_downloads_item.name }} | ansible.builtin.apt | True | Check mode reports the download without making it, so there is no .deb
+for apt to inspect: the preview stops at "would download". |
 | Remove the downloaded package for {{ pinned_downloads_item.name }} | ansible.builtin.file | False |  |
 
 #### File: tasks/main.yml
@@ -88,8 +91,9 @@ Matched as a substring, because tools print their version inside a sentence
 ("terraform-docs version v0.24.0 <sha> linux/amd64") rather than alone. |
 | Install {{ pinned_downloads_item.name }} | block | True |  |
 | Download {{ pinned_downloads_item.name }} | ansible.builtin.get_url | False |  |
-| Extract the binary for {{ pinned_downloads_item.name }} | ansible.builtin.unarchive | False | include, so only the binary lands: these archives carry LICENSE and
-README at their root, which would otherwise scatter into /usr/local/bin. |
+| Extract the binary for {{ pinned_downloads_item.name }} | ansible.builtin.unarchive | True | include, so only the binary lands: these archives carry LICENSE and
+README at their root, which would otherwise scatter into /usr/local/bin.
+Not in check mode after a download it only reported: no archive exists. |
 | Remove the downloaded archive for {{ pinned_downloads_item.name }} | ansible.builtin.file | False |  |
 
 

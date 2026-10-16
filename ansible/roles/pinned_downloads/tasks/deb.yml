@@ -15,6 +15,11 @@
   register: pinned_downloads_installed
   changed_when: false
   failed_when: false
+  # Read-only, so it runs under `make apply-check` too. Skipped there, as
+  # command tasks are by default, it left the gate below blind: every package
+  # looked missing, and the install failed on a download check mode never
+  # made.
+  check_mode: false
 
 - name: Install {{ pinned_downloads_item.name }}
   when: pinned_downloads_installed.stdout | default('') != pinned_downloads_item.version
@@ -25,10 +30,14 @@
         dest: "{{ pinned_downloads_tmp }}"
         checksum: "{{ pinned_downloads_item.checksum }}"
         mode: "0644"
+      register: pinned_downloads_fetch
 
+    # Check mode reports the download without making it, so there is no .deb
+    # for apt to inspect: the preview stops at "would download".
     - name: Install the package for {{ pinned_downloads_item.name }}
       ansible.builtin.apt:
         deb: "{{ pinned_downloads_tmp }}"
+      when: not (ansible_check_mode and pinned_downloads_fetch is changed)
 
     - name: Remove the downloaded package for {{ pinned_downloads_item.name }}
       ansible.builtin.file:
