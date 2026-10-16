@@ -101,10 +101,12 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Fixed
 
-- `make apply-check` no longer fails at BalenaEtcher on every machine. Its
-  version check never ran in check mode, so every pinned download looked
-  missing and the preview tried to install a .deb it had not downloaded; it
-  now reports what it would download and install instead.
+- `make apply-check` runs to the end instead of failing on every machine.
+  Check mode skipped the read-only lookups later steps depend on -- which
+  pinned downloads are installed, where BalenaEtcher's binary is, what the
+  machine has installed -- so the preview failed on files it had never
+  fetched and judged a stale or missing inventory. Those lookups now run in
+  check mode, and what a real run would install is reported, not failed on.
 - The desktop stamp shows "no network" on a machine with no network route
   instead of failing on every refresh and leaving the wallpaper unstamped.
 - `make doctor` now catches an apt origin declared with two different keys

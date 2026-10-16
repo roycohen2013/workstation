@@ -20,7 +20,14 @@ Description: Records what was actually installed and fails the build on drift fr
 
 
 
+### Vars
 
+**These are variables with higher priority**
+#### File: vars/main.yml
+
+| Var          | Type         | Value       |
+|--------------|--------------|-------------|
+| [manifest_check_path](vars/main.yml#L5)   | str | `/tmp/workstation-manifest.check.json` |    
 
 
 ### Tasks
@@ -30,9 +37,13 @@ Description: Records what was actually installed and fails the build on drift fr
 
 | Name | Module | Has Conditions | Comments |
 | ---- | ------ | -------------- | -------- |
-| Capture the installed inventory | ansible.builtin.script | False |  |
+| Capture the installed inventory | ansible.builtin.script | False | The capture only reads the machine, so it also runs under `make apply-check`
+-- into a scratch file, leaving the real manifest alone. Skipped there, as
+script tasks are by default, this role went on to judge whatever manifest
+the last converge left behind, or failed outright on a machine without one. |
 | Report what was captured | ansible.builtin.debug | False |  |
 | Read the manifest back | ansible.builtin.slurp | False |  |
+| Remove the check-mode inventory | ansible.builtin.file | True |  |
 | Parse the manifest | ansible.builtin.set_fact | False |  |
 | Collect the packages pinned downloads install | ansible.builtin.set_fact | False | A pinned download of kind deb is an apt package once installed, so it is
 declared like one -- under its package name, which may differ from its name. |
@@ -55,7 +66,9 @@ nothing that asks dpkg about the name itself can see it: the image tests in
 tests/goss fail on it, after a converge that reported success. Failing here
 names the package to declare instead. |
 | Identify packages that were declared for removal but are still present | ansible.builtin.set_fact | False |  |
-| Fail the build when a declared package is not installed | ansible.builtin.assert | False |  |
+| Report what this run would install or remove | ansible.builtin.debug | True | In check mode the inventory is the machine before this run, so what is
+missing is what `make apply` would install: reported, not failed on. |
+| Fail the build when a declared package is not installed | ansible.builtin.assert | True |  |
 | Record the declared set alongside the manifest | ansible.builtin.copy | False | Written separately rather than merged into the manifest so the capture script
 stays a pure inventory of the machine, with no notion of what was intended.
 render-docs.py joins the two, and run-goss.sh feeds this file to goss as its

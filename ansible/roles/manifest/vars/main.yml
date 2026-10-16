@@ -1,0 +1,5 @@
+---
+# Where `make apply-check` writes its inventory of the machine. Scratch only:
+# the real manifest at /etc/workstation-manifest.json is left as the last
+# converge wrote it, and this file is removed again once read.
+manifest_check_path: /tmp/workstation-manifest.check.json
