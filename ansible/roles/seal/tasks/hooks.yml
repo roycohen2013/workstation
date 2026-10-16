@@ -30,8 +30,11 @@
 
 - name: Run each role's image-phase hook
   ansible.builtin.include_role:
-    name: "{{ item }}"
+    name: "{{ seal_hook }}"
     tasks_from: seal
     apply:
       tags: [seal]
   loop: "{{ seal_hooks }}"
+  # Not `item`: a hook's own loops use it, and would shadow this one.
+  loop_control:
+    loop_var: seal_hook
