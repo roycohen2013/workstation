@@ -39,6 +39,18 @@
 # turns out wrong would silently skip the wrapper instead of failing loudly.
 # Installed rather than run from here because the image test checks the
 # wrapper with the same script, so the two agree on which file is the binary.
+# Created here, not assumed: only roles/firstboot makes this directory, and it
+# runs in the image phase alone, so on a machine converged by `make apply` it
+# does not exist.
+- name: Create the directory for the launcher-binary helper
+  ansible.builtin.file:
+    path: /usr/local/lib/workstation
+    state: directory
+    mode: "0755"
+  when:
+    - workstation_balena_etcher_enabled | bool
+    - workstation_desktop_enabled | bool
+
 - name: Install the launcher-binary helper
   ansible.builtin.copy:
     src: launcher-binary.sh
