@@ -283,8 +283,10 @@ _(list or block — see the file)_
 Each entry adds a signed keyring and a sources.list.d entry, then installs its
 packages from it. roles/apt_repos does the work and checks every entry before
 touching anything, so a missing or misspelt field fails the run up front.
-- `name`: the entry's name. Our source file is sources.list.d/<name>.list,
-  and the keyring defaults to /etc/apt/keyrings/<name>.gpg.
+- `name`: the entry's name. Our source file is a deb822
+  sources.list.d/workstation-<name>.sources, and the keyring defaults to
+  /etc/apt/keyrings/<name>.gpg. A one-line <name>.list, which older
+  versions wrote, is removed -- except under `vendor_sources`, below.
 - `enabled`: optional feature switch.
 - `key_url`: the vendor's signing key, fetched on every converge so a
   rotated key is picked up.
@@ -292,15 +294,19 @@ touching anything, so a missing or misspelt field fails the run up front.
   its own -- see the vendors below for why matching it matters.
 - `key_armoured`: install the key as the .asc the vendor publishes, rather
   than dearmoured. Needs `key_path`.
-- `repo`: the deb line. Its signed-by must name the keyring path above;
-  anything else is refused, because it fails later as a signature error
-  that reads like a network fault.
-- `repo_replaces`: lines an entry used to declare, so changing `repo` does
-  not leave the old line next to the new one on machines that have it.
-- `vendor_sources`: the vendor's package installs its own deb822 source at
-  sources.list.d/<name>.sources and disables ours. Our entry then only
-  bootstraps the first install and is removed once theirs exists. Without
-  it the two fight, and every converge reports a change.
+- `repo`: the deb line, as the vendor documents it:
+  `deb [options] uri suite [components]`. It is written out as deb822.
+  Its signed-by must name the keyring path above; anything else is refused,
+  because it fails later as a signature error that reads like a network
+  fault.
+- `vendor_sources`: the vendor's package writes its own deb822 source at
+  sources.list.d/<name>.sources. Our entry then only bootstraps the first
+  install, as the one-line <name>.list the vendor's postinst takes over, and
+  is removed once theirs exists. Without it the origin stays declared
+  twice.
+- `vendor_opt_out`: a setting that stops the vendor's package adding an apt
+  source of its own, as `file`, `setting` and `value`. Written before the
+  package installs, because its postinst reads it.
 - `debsig_key_id` and `debsig_policy_url`: a debsig-verify policy, which
   checks the .deb's own signature on top of apt's repository signature.
 - `packages`: what to install from it. Never list these in apps_apt_base:

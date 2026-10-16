@@ -100,6 +100,14 @@
       vendor_sources: >-
         {{ apt_repos_enabled | default([]) | selectattr('vendor_sources', 'defined')
            | selectattr('vendor_sources') | map(attribute='name') | sort }}
+      # Every other enabled repository keeps our deb822 source, and the
+      # one-line .list an older roles/apt_repos wrote must be gone.
+      own_sources: >-
+        {{ apt_repos_enabled | default([]) | map(attribute='name')
+           | difference(apt_repos_enabled | default([])
+                        | selectattr('vendor_sources', 'defined')
+                        | selectattr('vendor_sources') | map(attribute='name'))
+           | sort }}
       debsig: "{{ manifest_repo_debsig | default([]) }}"
       apt: >-
         {{ (apps_apt_base

@@ -5,12 +5,17 @@
 #
 # Each entry goes through the same lifecycle, in this order:
 #   1. its signing key is fetched, cached, and installed at its keyring path
-#   2. lines it used to declare (repo_replaces) are removed
-#   3. its source line is added -- unless the vendor's own .sources file has
-#      already taken over (vendor_sources)
+#   2. the one-line .list an older version of this role wrote is removed,
+#      unless that .list is a vendor_sources bootstrap
+#   3. its source is written as deb822, to workstation-<name>.sources -- or,
+#      for vendor_sources, as a one-line bootstrap <name>.list until the
+#      vendor's own .sources file has taken over
 #   4. its debsig policy is installed, if it declares one
-#   5. its packages are installed, at the repository's latest version
-#   6. our bootstrap .list is removed wherever the vendor's .sources replaced it
+#   5. the vendor's package is told not to add a source of its own
+#      (vendor_opt_out), then its packages are installed at the repository's
+#      latest version
+#   6. our bootstrap source is removed wherever the vendor's .sources
+#      replaced it
 
 # Checked up front, for every entry including disabled ones, so a malformed
 # entry fails here with its name -- not as a NO_PUBKEY or a signature error
@@ -31,6 +36,12 @@
       - not (item.key_armoured | default(false) | bool) or item.key_path is defined
       - (item.debsig_key_id is defined) == (item.debsig_policy_url is defined)
       - >-
+        item.vendor_opt_out is not defined or
+        (item.vendor_opt_out.keys() | sort) == ['file', 'setting', 'value']
+      # No backslashes: ansible-core releases disagree on whether a Jinja
+      # string literal unescapes them, so [[] and [^ ] stand in for \[ and \S.
+      - item.repo | default('') is match('deb [[][^]]*[]] [^ ]+ [^ ]+( [^ ]+)*$')
+      - >-
         item.repo | default('') is search('signed-by=' ~ (item.key_path
         | default('/etc/apt/keyrings/' ~ item.name | default('') ~ '.gpg')
         | regex_escape) ~ '[] ]')
@@ -40,7 +51,9 @@
       only use the fields {{ apt_repos_fields | join(', ') }}
       (unknown: {{ item.keys() | difference(apt_repos_fields) | join(', ') or 'none' }}).
       key_armoured needs an explicit key_path; debsig_key_id and
-      debsig_policy_url go together; and the repo line must say
+      debsig_policy_url go together; vendor_opt_out needs exactly file,
+      setting and value; and the repo line must read
+      `deb [options] uri suite [components]`, with options saying
       signed-by={{ item.key_path | default('/etc/apt/keyrings/' ~ item.name | default('?') ~ '.gpg') }},
       the keyring path this entry installs.
     quiet: true
@@ -79,7 +92,7 @@
 # Kept, not deleted afterwards, and out of /tmp. get_url compares an existing
 # file against what it fetches and reports ok when they match -- but only if
 # the file is still there. Deleting it made this task, and the dearmour and
-# apt_repository tasks below it, report changed on every single converge; the
+# source tasks below it, report changed on every single converge; the
 # CI idempotence pass is what surfaced that. /var/cache rather than /tmp so it
 # also survives a reboot. This is public key material, a few KB per vendor.
 - name: Ensure the key cache exists
@@ -169,17 +182,23 @@
   loop_control:
     label: "{{ item.name }}"
 
-# Some vendors' postinst replaces the source this role declares with its own
-# deb822 file, /etc/apt/sources.list.d/<name>.sources, and then disables ours:
-# 1Password comments out our .list, Chrome deletes it. Either way, re-adding
-# ours on the next converge only restarts the fight, and CI's idempotence pass
-# reported "Add repositories" changed on every run because of it.
+# Some vendors' postinst writes its own deb822 source,
+# /etc/apt/sources.list.d/<name>.sources, on every install and upgrade:
+# 1Password and Chrome both do. Declaring ours as well, on every converge,
+# would leave each origin declared twice for good.
 #
 # Our entry is only needed to bootstrap: once the vendor's .sources exists it
 # is authoritative and ours is redundant. So entries marked vendor_sources in
 # group_vars stop being declared here once that file exists, and our leftover
-# .list is removed after the packages install, below -- leaving exactly one
-# declaration of each origin.
+# bootstrap .list is removed after the packages install, below -- leaving
+# exactly one declaration of each origin.
+#
+# That bootstrap stays a one-line <name>.list, not deb822, because it is what
+# the vendors' postinst looks for. Chrome's writes google-chrome.sources on an
+# upgrade only by migrating a google-chrome.list it recognises, once
+# /etc/default/google-chrome exists -- CI's runner ships Chrome preinstalled,
+# and without the .list it kept our source and never wrote its own.
+# 1Password's comments the .list out.
 - name: Check which vendors already manage their own apt source
   ansible.builtin.stat:
     path: "/etc/apt/sources.list.d/{{ item.name }}.sources"
@@ -193,32 +212,123 @@
     apt_repos_vendor_owned: >-
       {{ apt_repos_vendor_sources.results | selectattr('stat.exists')
          | map(attribute='item.name') | list }}
+    apt_repos_vendor_bootstrap: >-
+      {{ apt_repos_vendor_sources.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}
+    # Everything that is not vendor_sources: its source is ours, as deb822.
+    apt_repos_own_sources: >-
+      {{ apt_repos_enabled | rejectattr('name', 'in',
+           apt_repos_vendor_sources.results | map(attribute='item.name') | list)
+         | list }}
 
-# Before adding: apt_repository matches lines exactly, so a changed `repo`
-# would otherwise be appended next to the line it replaces.
-- name: Remove repository lines an entry no longer declares
-  ansible.builtin.apt_repository:
-    repo: "{{ item.1 }}"
-    filename: "{{ item.0.name }}"
-    state: absent
-    update_cache: false
-  loop: "{{ apt_repos_enabled | subelements('repo_replaces', skip_missing=True) }}"
-  loop_control:
-    label: "{{ item.0.name }}"
-
-- name: Add repositories
-  ansible.builtin.apt_repository:
-    repo: "{{ item.repo }}"
-    filename: "{{ item.name }}"
+# deb822_repository parses and writes sources through python3-debian.
+# Installed before the old .list files go, so a failure here leaves the
+# machine with the sources it had rather than with none.
+- name: Install the deb822 sources library
+  ansible.builtin.apt:
+    name: python3-debian
     state: present
-    # Refresh inline rather than in a separate changed-gated task: the very
-    # next task installs from these repositories, and a handler would not run
-    # until the end of the play -- far too late.
-    update_cache: true
-  loop: "{{ apt_repos_enabled }}"
+  register: apt_repos_debian_lib
+
+# `make apply-check` installs nothing, and deb822_repository cannot even
+# preview a change without the library -- so on the one check run before it
+# is installed, the source tasks are skipped rather than failed.
+- name: Note that sources cannot be previewed yet
+  ansible.builtin.debug:
+    msg: >-
+      python3-debian is not installed yet, so this check run cannot preview
+      the apt source changes. `make apply` installs it first.
+  when: ansible_check_mode and apt_repos_debian_lib is changed
+
+# Older versions of this role wrote each source with apt_repository, as a
+# one-line sources.list.d/<name>.list. That module is deprecated in favour of
+# deb822_repository, so sources are now deb822 files -- and the .list is
+# removed first, or apt would read every repository twice and warn about it
+# on each update. A <name>.list someone wrote by hand from the vendor's
+# install docs (HashiCorp's, for one) goes too: it declares the same origin.
+# Not for vendor_sources entries, whose .list is still the bootstrap above.
+- name: Remove one-line sources an older version of this role wrote
+  ansible.builtin.file:
+    path: "/etc/apt/sources.list.d/{{ item.name }}.list"
+    state: absent
+  loop: "{{ apt_repos_own_sources }}"
   loop_control:
     label: "{{ item.name }}"
-  when: item.name not in apt_repos_vendor_owned
+  register: apt_repos_legacy_removed
+
+# The one-line `repo` in group_vars stays the single source of truth -- it is
+# what vendors document and what scripts/verify-repos.py checks -- and is split
+# into deb822 fields here. The assert above has already checked its shape.
+- name: Translate repository lines into deb822 fields
+  ansible.builtin.set_fact:
+    apt_repos_deb822: >-
+      {{ apt_repos_deb822 | default({}) | combine({item.name: {
+           'uris': _words[0],
+           'suites': _words[1],
+           'components': _words[2:],
+           'architectures': (_opts | regex_findall('(?:^| )arch=([^ ]+)')
+                             | first | default('')).split(',') | select | list,
+           'signed_by': _opts | regex_findall('(?:^| )signed-by=([^ ]+)') | first,
+         }}) }}
+  # Written without backslashes, as the assert above explains.
+  vars:
+    _repo: >-
+      {{ item.repo | trim }}
+    _opts: >-
+      {{ _repo | regex_findall('^deb [[]([^]]*)[]]') | first }}
+    _words: >-
+      {{ (_repo | regex_replace('^deb [[][^]]*[]] ', '')).split() }}
+  loop: "{{ apt_repos_own_sources }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Named workstation-<name>, never plain <name>, for two reasons:
+#   - <name>.sources is exactly where some vendors' packages write their own
+#     file, and the stat above tells the two apart by that path. Sharing it
+#     would hand the file back and forth between us and their postinst.
+#   - deb822_repository derives a keyring path from the same name, and with
+#     state=absent deletes /etc/apt/keyrings/<name>.gpg -- the very keyring
+#     this role installs for the default key_path.
+- name: Add repositories
+  ansible.builtin.deb822_repository:
+    name: "workstation-{{ item.name }}"
+    types: deb
+    uris: "{{ apt_repos_deb822[item.name].uris }}"
+    suites: "{{ apt_repos_deb822[item.name].suites }}"
+    components: "{{ apt_repos_deb822[item.name].components }}"
+    architectures: "{{ apt_repos_deb822[item.name].architectures or omit }}"
+    signed_by: "{{ apt_repos_deb822[item.name].signed_by }}"
+    mode: "0644"
+    state: present
+  loop: "{{ apt_repos_own_sources }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (ansible_check_mode and apt_repos_debian_lib is changed)
+  register: apt_repos_added
+
+# The vendor_sources bootstrap, until the vendor's own .sources exists: the
+# repo line verbatim, as the one-line .list its postinst knows how to take
+# over. Written as a file rather than with apt_repository, which is
+# deprecated.
+- name: Add bootstrap sources for vendors that replace them
+  ansible.builtin.copy:
+    content: "{{ item.repo | trim }}\n"
+    dest: "/etc/apt/sources.list.d/{{ item.name }}.list"
+    mode: "0644"
+  loop: "{{ apt_repos_vendor_bootstrap }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: apt_repos_bootstrapped
+
+# Refreshed here rather than by a handler: the packages below install from
+# these repositories, and a handler would not run until the end of the play.
+# deb822_repository, unlike apt_repository, never refreshes the cache itself.
+- name: Refresh the package lists after a source changed
+  ansible.builtin.apt:
+    update_cache: true
+  when: >-
+    apt_repos_added is changed or apt_repos_legacy_removed is changed
+    or apt_repos_bootstrapped is changed
 
 # debsig-verify policies, for entries that declare debsig_key_id. Where apt
 # verifies the repository, debsig verifies the .deb's own signature -- so the
@@ -260,6 +370,23 @@
   loop_control:
     label: "{{ item.name }}"
 
+# Some vendors' postinst adds a source of its own unless told not to.
+# Claude Desktop writes claude-desktop.list whenever that path is free, which
+# it is now that ours is deb822: the same origin declared twice, a warning on
+# every apt update, and the list removed again by the next converge. Its
+# documented opt-out is a setting in /etc/default/claude-desktop, read by the
+# postinst -- so it has to be in place before the package installs.
+- name: Tell vendor packages not to add an apt source of their own
+  ansible.builtin.lineinfile:
+    path: "{{ item.vendor_opt_out.file }}"
+    regexp: "^[ \t]*(export[ \t]+)?{{ item.vendor_opt_out.setting }}="
+    line: "{{ item.vendor_opt_out.setting }}={{ item.vendor_opt_out.value }}"
+    create: true
+    mode: "0644"
+  loop: "{{ apt_repos_enabled | selectattr('vendor_opt_out', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
 # latest, not present: base upgrades everything before these repositories
 # are added, so a package already installed from elsewhere -- a .deb fetched
 # by hand, or the GitHub runner's preinstalled docker-ce and Chrome -- would
@@ -278,10 +405,10 @@
 # every image build, and every CI runner -- that check ran before the vendor's
 # package was installed, so it was false: our .list was written to bootstrap,
 # then the postinst wrote .sources. Reusing that stale answer skipped the
-# cleanup, shipped the dead .list in every image, and left it for the second
-# converge to delete, which made CI's idempotence pass report a change on
-# every run. If a future postinst ever stops writing .sources, this stays
-# false and our .list is kept: apt still has a working source.
+# cleanup, shipped the dead bootstrap source in every image, and left it for
+# the second converge to delete, which made CI's idempotence pass report a
+# change on every run. If a future postinst ever stops writing .sources, this
+# stays false and ours is kept: apt still has a working source.
 - name: Check again which vendors now manage their own apt source
   ansible.builtin.stat:
     path: "/etc/apt/sources.list.d/{{ item.name }}.sources"

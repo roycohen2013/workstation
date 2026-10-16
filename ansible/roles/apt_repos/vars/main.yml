@@ -8,8 +8,8 @@ apt_repos_fields:
   - key_path
   - key_armoured
   - repo
-  - repo_replaces
   - vendor_sources
+  - vendor_opt_out
   - debsig_key_id
   - debsig_policy_url
   - packages
