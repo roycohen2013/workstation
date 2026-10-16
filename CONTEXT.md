@@ -67,6 +67,13 @@ template rather than a copy of one machine. Runs only in the image phase.
 The regeneration of machine identity the first time a flashed machine boots. The
 counterpart to seal; armed during the image phase, runs once on the target.
 
+**Seal hook**:
+A role's own image-phase half, `roles/<role>/tasks/seal.yml`: what that role
+must clean out of an image, plus the **first-boot step** that undoes it on the
+target, installed into `/usr/local/lib/workstation/firstboot.d/`. Seal finds
+and runs every hook; firstboot runs every step. Never runs on a live machine.
+_Avoid_: seal task (for a role's hook), firstboot script (for a role's step)
+
 **Drift**:
 Declared no longer matching installed. Caught by the manifest check, which fails
 the build; fixed by converging or rebuilding.

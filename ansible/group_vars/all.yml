@@ -113,6 +113,9 @@ workstation_1password_enabled: true
 workstation_nimbalyst_enabled: true
 
 workstation_firewall_enabled: true
+# Live-only: `make apply` turns it on for the machine it runs on. An image
+# build refuses it, because the server's hardening cannot be applied while
+# Packer is connected over SSH -- see roles/security.
 workstation_ssh_server_enabled: false   # laptops rarely want inbound SSH
 
 # Overridden to 'image' by Packer. Defaults to 'live' so `make apply` just works.

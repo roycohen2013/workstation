@@ -27,6 +27,14 @@ file:
     mode: "0755"
   /var/lib/workstation/firstboot-pending:
     exists: true   # firstboot is armed; without this the image never adapts
+  # Each role's own first-boot step, installed by its tasks/seal.yml: without
+  # them a flashed machine never gets SSH host keys or power management.
+  /usr/local/lib/workstation/firstboot.d/20-ssh-host-keys.sh:
+    exists: true
+    mode: "0755"
+  /usr/local/lib/workstation/firstboot.d/50-power-management.sh:
+    exists: true
+    mode: "0755"
   /etc/workstation-release:
     exists: true
     contents:

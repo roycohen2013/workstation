@@ -1,0 +1,37 @@
+---
+# Every roles/<role>/tasks/seal.yml, found rather than listed, so a role adds
+# its image-phase cleanup -- and the first-boot step that undoes it on the
+# target machine -- without editing this file. A hook runs whether or not its
+# role did (the desktop can be switched off), so each must be safe either way.
+# Sorted, so the order is the same on every build.
+#
+# filetree, not fileglob: fileglob expands a wildcard only in the file name,
+# never in a directory, so roles/*/tasks/seal.yml silently matches nothing and
+# every hook is skipped. Both read the controller, where Packer's roles live.
+- name: Find each role's image-phase hook
+  ansible.builtin.set_fact:
+    seal_hooks: >-
+      {{ query('community.general.filetree', role_path ~ '/..')
+         | selectattr('state', 'equalto', 'file')
+         | map(attribute='path')
+         | select('match', '^[^/]+/tasks/seal[.]yml$')
+         | map('split', '/') | map('first')
+         | sort }}
+
+# An empty list would make every role's cleanup silently stop happening, which
+# is exactly how the fileglob version above failed; it must never pass quietly.
+- name: Refuse to seal without finding any hooks
+  ansible.builtin.assert:
+    that: seal_hooks | length > 0
+    fail_msg: >-
+      No roles/*/tasks/seal.yml found under {{ role_path }}/.. -- the image
+      would ship without each role's image-phase cleanup.
+    quiet: true
+
+- name: Run each role's image-phase hook
+  ansible.builtin.include_role:
+    name: "{{ item }}"
+    tasks_from: seal
+    apply:
+      tags: [seal]
+  loop: "{{ seal_hooks }}"

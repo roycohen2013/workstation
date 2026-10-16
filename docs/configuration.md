@@ -220,6 +220,10 @@ downloads, declared in pinned_downloads below with their versions.
 
 `false   # laptops rarely want inbound SSH`
 
+Live-only: `make apply` turns it on for the machine it runs on. An image
+build refuses it, because the server's hardening cannot be applied while
+Packer is connected over SSH -- see roles/security.
+
 ### `workstation_phase`
 
 `live`

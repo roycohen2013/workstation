@@ -1,0 +1,37 @@
+---
+# roles/security's image-phase half. roles/seal runs this once every role has
+# converged, just before it strips machine identity; it never runs on a live
+# machine. Must be safe whatever the feature flags say.
+
+# Disabled rather than stopped: Packer is connected over this very service,
+# and stopping it would cut the build off before seal finishes. It takes
+# effect at the next boot, which is the target machine's first.
+# roles/security refuses to build an image with workstation_ssh_server_enabled
+# set, so here it is always off.
+- name: Leave the SSH server disabled in the image
+  ansible.builtin.systemd:
+    name: ssh
+    enabled: false
+  failed_when: false
+
+# Every machine flashed from the image would otherwise present the same host
+# keys, which defeats host verification across all of them.
+- name: Remove SSH host keys
+  ansible.builtin.shell:
+    cmd: rm -f /etc/ssh/ssh_host_*
+  changed_when: true
+
+- name: Regenerate SSH host keys on the target machine's first boot
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      # Managed by Ansible (roles/security, tasks/seal.yml). Run once by
+      # workstation-firstboot: the image ships without host keys so machines
+      # flashed from it do not share them.
+      set -euo pipefail
+      if ! ls /etc/ssh/ssh_host_*_key >/dev/null 2>&1; then
+          echo "[firstboot] generating SSH host keys"
+          ssh-keygen -A
+      fi
+    dest: /usr/local/lib/workstation/firstboot.d/20-ssh-host-keys.sh
+    mode: "0755"

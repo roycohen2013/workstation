@@ -60,6 +60,10 @@ agent/skill configuration do not — see [CONTRIBUTING.md](CONTRIBUTING.md).
 - `make lint` runs exactly the checks CI runs, through the same targets, so a
   clean local run predicts a green one: both playbook phases are
   syntax-checked and Packer is fully validated, not only parsed.
+- An image build now refuses `workstation_ssh_server_enabled: true` in its first
+  minutes. An image cannot ship the server hardened, so the flag is applied by
+  `make apply` on the machine that wants it; before, the image shipped the
+  server enabled on stock settings.
 - Every pull request now checks that a converged machine matches what
   `group_vars` declares, not only that the playbook ran, and flipping a
   feature flag no longer breaks the next image build on a stale test.

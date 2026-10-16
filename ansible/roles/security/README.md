@@ -30,6 +30,12 @@ Description: Firewall policy, SSH hardening and unattended upgrades.
 
 | Name | Module | Has Conditions | Comments |
 | ---- | ------ | -------------- | -------- |
+| Refuse to build an image with the SSH server on | ansible.builtin.assert | True | An image cannot ship the SSH server on safely. Its hardening drop-in sets
+PasswordAuthentication no, and Packer is connected to the build VM over SSH
+with a password: writing it mid-build would lock Packer out partway through,
+and leaving it out would ship a running sshd on stock settings to every
+machine flashed from the image. So the flag is live-only, and refused here in
+the first minutes of a build rather than discovered on a laptop. |
 | Install security packages | ansible.builtin.apt | False |  |
 | Set UFW default incoming policy | community.general.ufw | True | --- Firewall ----------------------------------------------------------------- |
 | Set UFW default outgoing policy | community.general.ufw | True |  |
@@ -63,6 +69,19 @@ running service simply adopts the directory. |
 | Set SSH server run state | ansible.builtin.systemd | True |  |
 | Configure unattended upgrades | ansible.builtin.copy | True | --- Automatic updates -------------------------------------------------------- |
 | Enable periodic apt activity | ansible.builtin.copy | True |  |
+
+#### File: tasks/seal.yml
+
+| Name | Module | Has Conditions | Comments |
+| ---- | ------ | -------------- | -------- |
+| Leave the SSH server disabled in the image | ansible.builtin.systemd | False | Disabled rather than stopped: Packer is connected over this very service,
+and stopping it would cut the build off before seal finishes. It takes
+effect at the next boot, which is the target machine's first.
+roles/security refuses to build an image with workstation_ssh_server_enabled
+set, so here it is always off. |
+| Remove SSH host keys | ansible.builtin.shell | False | Every machine flashed from the image would otherwise present the same host
+keys, which defeats host verification across all of them. |
+| Regenerate SSH host keys on the target machine's first boot | ansible.builtin.copy | False |  |
 
 
 

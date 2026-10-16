@@ -1,0 +1,36 @@
+---
+# roles/hardware's image-phase half. roles/seal runs this once every role has
+# converged; it never runs on a live machine.
+
+# Disabled in the artifact: tlp on a VM throttles a machine that has no battery
+# to save, and the image is built in one. On a live machine
+# tasks/main.yml decides from Ansible's virtualisation fact; on a flashed one
+# the first-boot step below decides, because Ansible is not there to.
+- name: Leave power services disabled in the image
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: false
+  loop:
+    - tlp
+    - thermald
+  failed_when: false
+
+- name: Enable power management on the target machine's first boot, on metal only
+  ansible.builtin.copy:
+    content: |
+      #!/usr/bin/env bash
+      # Managed by Ansible (roles/hardware, tasks/seal.yml). Run once by
+      # workstation-firstboot. The same decision tasks/main.yml makes on a
+      # live machine, taken here with systemd-detect-virt instead of Ansible's
+      # virtualisation fact.
+      set -uo pipefail
+      virt=$(systemd-detect-virt 2>/dev/null || echo none)
+      if [ "$virt" = "none" ]; then
+          echo "[firstboot] physical hardware detected; enabling power management"
+          systemctl enable --now tlp thermald
+          fwupdmgr refresh --force >/dev/null 2>&1 || true
+      else
+          echo "[firstboot] running under $virt; leaving power management disabled"
+      fi
+    dest: /usr/local/lib/workstation/firstboot.d/50-power-management.sh
+    mode: "0755"
