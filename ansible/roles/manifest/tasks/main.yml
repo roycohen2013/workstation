@@ -8,10 +8,17 @@
 # quietly missing rather than erroring -- see site.yml, where the ordering is
 # commented.
 
+# The capture only reads the machine, so it also runs under `make apply-check`
+# -- into a scratch file, leaving the real manifest alone. Skipped there, as
+# script tasks are by default, this role went on to judge whatever manifest
+# the last converge left behind, or failed outright on a machine without one.
 - name: Capture the installed inventory
   ansible.builtin.script:
-    cmd: capture-manifest.py /etc/workstation-manifest.json
+    cmd: >-
+      capture-manifest.py
+      {{ manifest_check_path if ansible_check_mode else '/etc/workstation-manifest.json' }}
   changed_when: false
+  check_mode: false
   register: manifest_capture
 
 - name: Report what was captured
@@ -20,8 +27,16 @@
 
 - name: Read the manifest back
   ansible.builtin.slurp:
-    src: /etc/workstation-manifest.json
+    src: "{{ manifest_check_path if ansible_check_mode else '/etc/workstation-manifest.json' }}"
   register: manifest_raw
+
+- name: Remove the check-mode inventory
+  ansible.builtin.file:
+    path: "{{ manifest_check_path }}"
+    state: absent
+  check_mode: false
+  changed_when: false
+  when: ansible_check_mode
 
 - name: Parse the manifest
   ansible.builtin.set_fact:
@@ -157,7 +172,18 @@
     manifest_not_removed: >-
       {{ manifest_declared.absent | intersect(manifest_data.satisfied_names) }}
 
+# In check mode the inventory is the machine before this run, so what is
+# missing is what `make apply` would install: reported, not failed on.
+- name: Report what this run would install or remove
+  ansible.builtin.debug:
+    msg: >-
+      Declared but not installed yet:
+      {{ (manifest_missing.apt + manifest_missing.flatpak + manifest_missing.snap) | join(', ') or 'none' }}.
+      Declared absent but still present: {{ manifest_not_removed | join(', ') or 'none' }}.
+  when: ansible_check_mode
+
 - name: Fail the build when a declared package is not installed
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - manifest_missing.apt | length == 0

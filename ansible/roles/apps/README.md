@@ -62,6 +62,10 @@ runs in the image phase alone, so on a machine converged by `make apply` it
 does not exist. |
 | Install the launcher-binary helper | ansible.builtin.copy | True |  |
 | Resolve the real binary BalenaEtcher's launcher runs | ansible.builtin.command | True |  |
+| Note that BalenaEtcher's wrapper cannot be previewed yet | ansible.builtin.debug | True | In check mode a failure here can be check mode's own doing: a balena-etcher
+or helper that this preview only reported installing is not on disk to
+resolve. Say so and skip the wrapper; `make apply` installs them for real,
+and fails loudly here if resolving still does not work. |
 | Fail loudly if the real binary could not be resolved | ansible.builtin.assert | True |  |
 | Move the real binary aside | ansible.builtin.shell | True | Keyed on what is at <binary> now, not on whether <binary>.real exists.
 dpkg does not track .real, so a version bump writes the NEW binary over our

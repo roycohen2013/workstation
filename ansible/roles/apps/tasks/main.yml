@@ -66,21 +66,45 @@
   register: apps_etcher_real_binary
   changed_when: false
   failed_when: false
+  # Read-only, so it runs under `make apply-check` too. Skipped there, as
+  # command tasks are by default, it left no stdout, and the assert below
+  # failed on every machine.
+  check_mode: false
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
+
+# In check mode a failure here can be check mode's own doing: a balena-etcher
+# or helper that this preview only reported installing is not on disk to
+# resolve. Say so and skip the wrapper; `make apply` installs them for real,
+# and fails loudly here if resolving still does not work.
+- name: Note that BalenaEtcher's wrapper cannot be previewed yet
+  ansible.builtin.debug:
+    msg: >-
+      Cannot resolve BalenaEtcher's real binary in check mode
+      ({{ apps_etcher_real_binary.stderr | default('', true)
+         or apps_etcher_real_binary.msg | default('no output', true) }}), so the
+      --no-sandbox wrapper is not previewed. `make apply` installs what it
+      needs first.
+  when:
+    - workstation_balena_etcher_enabled | bool
+    - workstation_desktop_enabled | bool
+    - ansible_check_mode
+    - apps_etcher_real_binary.rc != 0
 
 - name: Fail loudly if the real binary could not be resolved
   ansible.builtin.assert:
     that: apps_etcher_real_binary.rc == 0 and apps_etcher_real_binary.stdout | length > 0
     fail_msg: >-
       Could not resolve BalenaEtcher's real binary from its .desktop file
-      ({{ apps_etcher_real_binary.stderr | default('no output') }}). Without
+      ({{ apps_etcher_real_binary.stderr | default('', true)
+         or apps_etcher_real_binary.msg | default('no output', true) }}). Without
       it the --no-sandbox wrapper cannot be installed, and the package would
       ship in a state this repo has decided is not acceptable to ship silently.
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
+    - not (ansible_check_mode and apps_etcher_real_binary.rc != 0)
 
 # Keyed on what is at <binary> now, not on whether <binary>.real exists.
 # dpkg does not track .real, so a version bump writes the NEW binary over our
@@ -125,6 +149,7 @@
   when:
     - workstation_balena_etcher_enabled | bool
     - workstation_desktop_enabled | bool
+    - not (ansible_check_mode and apps_etcher_real_binary.rc != 0)
 
 # --- Snaps --------------------------------------------------------------------
 - name: Install snaps
