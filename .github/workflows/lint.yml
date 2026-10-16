@@ -42,6 +42,10 @@ jobs:
       - name: ansible-lint and syntax check (both phases)
         run: make lint-ansible
 
+      # Here rather than in the shell job: rendering needs Ansible.
+      - name: shellcheck the rendered shell templates
+        run: make lint-shell-templates
+
   packer:
     runs-on: ubuntu-latest
     steps:
@@ -137,3 +141,6 @@ jobs:
       # including skipping the vendored skills listed in skills-lock.json.
       - name: shellcheck
         run: make lint-shell
+
+      - name: Shell script tests
+        run: make test-scripts

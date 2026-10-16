@@ -237,7 +237,7 @@ docs-diff: ## Compare two builds. Usage: make docs-diff FROM=<version> TO=<versi
 # --- Lint ---------------------------------------------------------------------
 
 .PHONY: lint
-lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell lint-docs ## Run every linter
+lint: lint-yaml lint-ansible lint-packer lint-terraform lint-shell lint-shell-templates lint-docs ## Run every linter
 
 .PHONY: lint-commits
 lint-commits: ## Check commit messages. Usage: make lint-commits [RANGE=A..B]
@@ -316,6 +316,30 @@ lint-shell:
 	  | grep -vE "^\.claude/skills/($${vendored:-^})/") || true
 	if [ -z "$$sh_files" ]; then echo "lint-shell: no shell scripts found"; exit 0; fi
 	shellcheck $$sh_files
+
+.PHONY: lint-shell-templates
+lint-shell-templates:
+	@# The .sh.j2 templates are shell programs lint-shell never sees: it only
+	@# finds *.sh. Each is rendered with group_vars, as a converge renders it,
+	@# and the result shellchecked. A file with no shebang is a /etc/profile.d
+	@# snippet, sourced by sh, and checked as one.
+	@work=$$(mktemp -d)
+	trap 'rm -rf "$$work"' EXIT
+	for t in ansible/roles/*/templates/*.sh.j2; do
+	  out="$$work/$$(basename "$$t" .j2)"
+	  ansible localhost -c local -m ansible.builtin.template \
+	    -a "src=$$t dest=$$out" -e @ansible/group_vars/all.yml >/dev/null
+	  if head -1 "$$out" | grep -q '^#!'; then shellcheck "$$out"; else shellcheck -s sh "$$out"; fi
+	  echo "ok  $$t"
+	done
+
+.PHONY: test-scripts
+test-scripts: ## Run the shell script tests in tests/scripts
+	@# Plain bash with stub commands on PATH, so they need nothing installed
+	@# and run in seconds. Each exits non-zero on its first failed case.
+	@for t in tests/scripts/test-*.sh; do
+	  bash "$$t"
+	done
 
 .PHONY: fmt
 fmt: ## Reformat Packer and Terraform files in place

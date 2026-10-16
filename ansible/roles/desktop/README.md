@@ -70,6 +70,10 @@ group_vars for why not conky and why not a GNOME extension. |
 | Assert the base wallpaper exists | ansible.builtin.assert | True | Loud rather than silent: if a future Ubuntu drops this file, the converge
 stops here with the path in the message, instead of installing a timer that
 quietly renders nothing on every machine. |
+| Install the desktop info settings | ansible.builtin.copy | True | The renderer is files/workstation-desktop-info.sh, a plain script: kept out of
+this file so shellcheck and tests/scripts/test-desktop-info.sh can reach it.
+Its settings are written separately, each value shell-quoted, rather than
+substituted into the script by Jinja. |
 | Install the desktop info renderer | ansible.builtin.copy | True |  |
 | Install the desktop info user units | ansible.builtin.copy | True | A USER unit, not a system one: it needs the session's D-Bus to call gsettings,
 and the wallpaper is a per-user setting. Installed to /etc/systemd/user and
